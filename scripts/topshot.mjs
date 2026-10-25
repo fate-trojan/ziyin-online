@@ -1,0 +1,18 @@
+import { chromium } from 'playwright-core';
+const browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true, args: ['--enable-webgl','--ignore-gpu-blocklist','--use-angle=swiftshader'] });
+const ctx = await browser.newContext({ viewport: { width: 1200, height: 900 } });
+const page = await ctx.newPage();
+page.on('pageerror', e => console.log('ERR', e.message));
+page.on('console', m => { if (m.type() === 'error') console.log('CONSOLE', m.text()); });
+await page.goto('http://127.0.0.1:5173/', { waitUntil: 'networkidle' });
+await page.waitForFunction(() => window.__READY__, null, { timeout: 60000 });
+await page.waitForTimeout(800);
+await page.evaluate(() => { const c = window.__ZH.controls; c.minDistance = .2; c.maxDistance = 3000; c.maxPolarAngle = Math.PI; });
+await page.evaluate(() => window.__ZH.setViewNow([35, 430, 20], [35, 0, 19]));
+await page.waitForTimeout(1000);
+await page.screenshot({ path: 'screenshots/r1_top.png' });
+await page.evaluate(() => window.__ZH.setViewNow([-28, 1.7, 120], [-28, 9, 60]));
+await page.waitForTimeout(700);
+await page.screenshot({ path: 'screenshots/r1_axis.png' });
+console.log('ok');
+await browser.close();

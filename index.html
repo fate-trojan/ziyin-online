@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#14181a" />
+  <title>Ziyin Online</title>
+  <link rel="icon" href="data:," />
+  <script type="module" src="/src/main.js"></script>
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <div id="app">
+    <canvas id="scene"></canvas>
+
+    <div id="loading">
+      <div class="load-inner">
+        <div class="seal">Ziyin Online</div>
+        <div class="load-title">Digital Campus</div>
+        <div class="load-sub">ATLAS · 3D</div>
+        <div class="load-bar"><i></i></div>
+        <div class="load-note">loading...</div>
+      </div>
+    </div>
+
+    <header id="brand">
+      <div class="brand-row">
+        <div class="brand-seal">2026</div>
+          <div>
+            <h1>Campus</h1>
+            <p class="brand-sub">ATLAS <span>·</span> Digital</p>
+          </div>
+        </div>
+        <div class="brand-meta">
+          <span>29.9578° N</span><span class="dot">/</span><span>121.7157° E</span><span class="sep">|</span><span>浙江 · 宁波</span>
+        </div>
+      <div class="brand-desc">Ziyin Online</div>
+    </header>
+
+    <div id="topbar">
+      <button class="icon-btn" id="helpBtn" title="操作说明">?</button>
+      <button class="icon-btn" id="fullBtn" title="全屏">⛶</button>
+      <div class="daynight" id="dayNight">
+        <button data-mode="day" class="active" title="白天"><span class="ico">☀</span><span>白昼</span></button>
+        <button data-mode="night" title="夜晚"><span class="ico">☾</span><span>夜色</span></button>
+      </div>
+    </div>
+
+    <div id="labels"></div>
+
+    <div id="infoCard" class="hidden">
+      <button class="info-close" id="infoClose">×</button>
+      <div class="info-kicker">LANDMARK <span id="infoIndex">01</span></div>
+      <h2 id="infoTitle">大成殿</h2>
+      <div class="info-en" id="infoEn">DACHENG HALL</div>
+      <p id="infoDesc"></p>
+      <button class="info-go" id="infoGo">前往 <span>↗</span></button>
+    </div>
+
+    <input type="checkbox" id="showLabels" hidden />
+    <div id="joy" class="hidden"><i></i></div>
+    <div id="hint">WASD / 摇杆 移动 · Space 跳跃 · 拖拽 旋转 · 滚轮 缩放 · Shift 加速 · N 昼夜</div>
+    <div id="bottomInfo">
+      <span class="micro">PROCEDURAL RECONSTRUCTION</span>
+      <span class="micro dim">2026</span>
+    </div>
+    <div id="compass"><span class="n">N</span><span class="needle"></span></div>
+
+    <div id="helpModal" class="hidden">
+      <div class="help-card">
+        <button id="helpClose">×</button>
+        <div class="panel-kicker">QUICK GUIDE</div>
+        <h2>漫游指南</h2>
+        <div class="help-grid">
+          <div><b>W A S D</b><span>移动</span></div>
+          <div><b>Space</b><span>跳跃</span></div>
+          <div><b>Shift</b><span>奔跑</span></div>
+          <div><b>拖拽</b><span>旋转视角</span></div>
+          <div><b>滚轮 / 双指</b><span>缩放</span></div>
+          <div><b>摇杆</b><span>手机移动</span></div>
+          <div><b>N</b><span>昼夜</span></div>
+          <div><b>L</b><span>标注</span></div>
+        </div>
+        <p>Ziyin Online</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,30 @@
+import { chromium } from 'playwright-core';
+const browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true, args: ['--enable-webgl','--ignore-gpu-blocklist','--use-angle=swiftshader'] });
+// clean gym
+const d = await browser.newPage({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 1 });
+await d.goto('http://127.0.0.1:5173/', { waitUntil: 'networkidle' });
+await d.waitForFunction(() => window.__READY__, { timeout: 60000 });
+await d.addStyleTag({ content: '#panel,#topbar,#brand,#viewBar,#hint,#bottomInfo,#compass,#labels,#mobileHint{display:none!important} #app::after{display:none!important}' });
+await d.evaluate(() => { window.__ZH.setTime(11.5); window.__ZH.setViewNow([168,50,-58],[106,7,-130]); });
+await d.waitForTimeout(900);
+await d.screenshot({ path: '/tmp/clean_gym.png' });
+await d.close();
+// mobile final with UI
+const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+const m = await ctx.newPage();
+const logs = [];
+m.on('pageerror', e => logs.push(e.message));
+await m.goto('http://127.0.0.1:5173/', { waitUntil: 'networkidle' });
+await m.waitForFunction(() => window.__READY__, { timeout: 60000 });
+await m.waitForTimeout(900);
+await m.screenshot({ path: '/tmp/mobile_final_day.png' });
+await m.evaluate(() => { window.__ZH.setTime(21); });
+await m.waitForTimeout(900);
+await m.screenshot({ path: '/tmp/mobile_final_night.png' });
+await m.evaluate(() => { window.__ZH.setTime(11.5); });
+await m.waitForTimeout(500);
+await m.locator('.label[data-id="dacheng"]').click({ force: true });
+await m.waitForTimeout(1000);
+await m.screenshot({ path: '/tmp/mobile_final_info.png' });
+console.log('errors', logs);
+await browser.close();

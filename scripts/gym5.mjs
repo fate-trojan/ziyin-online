@@ -1,0 +1,11 @@
+import { chromium } from 'playwright-core';
+const browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true, args: ['--enable-webgl','--ignore-gpu-blocklist','--use-angle=swiftshader'] });
+const p = await browser.newPage({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 1 });
+await p.goto('http://127.0.0.1:5173/', { waitUntil: 'networkidle' });
+await p.waitForFunction(() => window.__READY__, { timeout: 60000 });
+await p.addStyleTag({ content: '#panel,#topbar,#brand,#viewBar,#hint,#bottomInfo,#compass,#labels,#mobileHint{display:none!important} #app::after{display:none!important}' });
+await p.evaluate(() => { window.__ZH.setTime(11.5); window.__ZH.setViewNow([106,26,-78],[106,4,-128]); });
+await p.waitForTimeout(800);
+await p.screenshot({ path: '/tmp/fset_gym5.png' });
+console.log('gym5');
+await browser.close();
