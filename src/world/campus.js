@@ -6,15 +6,15 @@ import {
   buildHillPlatform, buildHillStairB, buildCornerSquarePavilion, buildFenceRun,
   buildQinyuanGate, buildQinyuanPavilion, buildYuGongPavilion, buildGoosePen, buildSweetCafe,
   buildStudyRoom, buildBookBar, buildRoushiPavilion, buildFudeWestCourt, buildHexPavilion,
-  buildRoushiNorthCourt, ROUSHI_COURT_COLLIDERS
+  buildRoushiNorthCourt, buildStudyPond, ROUSHI_COURT_COLLIDERS
 } from './buildings.js';
-import { addStele, makeGlowSprite, addLantern } from './detail.js';
-import { decorateNorthBlock, decorateSouthBlock, decorateAcademy, decorateAnnex, punchFacade, WALL_FILL } from './classrooms.js';
+import { addStele, makeGlowSprite, addLantern, addMerged } from './detail.js';
+import { decorateNorthBlock, decorateSouthBlock, decorateAcademy, decorateAnnex } from './classrooms.js';
 import { Nature } from './nature.js';
 import { People } from './people.js';
 import { Context } from './context.js';
 import { makeGlowSpriteTexture } from '../textures.js';
-import { mulberry32, textTexture, tbox, mergeGeometriesSafe } from '../util.js';
+import { mulberry32, textTexture, tbox, tcyl, mergeGeometriesSafe } from '../util.js';
 
 const FOG_DAY = new THREE.Color(0xd9dcda);
 const FOG_NIGHT = new THREE.Color(0x23282c);
@@ -171,18 +171,34 @@ export class Campus {
       p.position.set(x, y, z); p.receiveShadow = true; this.group.add(p);
       return p;
     };
-    // 中轴：校门 → 泮池 → 大成门 → 大成殿 → 实验楼
-    path(-28, 126, 7, 46);
-    path(-28, 95, 5, 12);
+    // 石板路：按铺装尺寸细分贴图，避免长条铺装把石板纹理拉伸成整块
+    const slabPath = (x, z, w, d, ry = 0, y = .06) => {
+      const tex = m.path.map.clone();
+      // 贴图内一片 4×8 块石板：按约 1m 一块反算重复次数，避免出现碎砖感
+      tex.repeat.set(w / 4, d / 8);
+      tex.needsUpdate = true;
+      const mat = m.path.clone();
+      mat.map = tex;
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+      p.rotation.x = -Math.PI / 2; p.rotation.z = -ry;
+      p.position.set(x, y, z); p.receiveShadow = true; this.group.add(p);
+    };
+    // 中轴：校门 → 泮池 为石板路（实景浅灰石板），旗杆前不再铺沥青
+    // 泮池前圆形花坛周边石板广场：东西向各延伸 10m（33.2×6.9），花坛居中、行人绕行；以南收窄为 7m 步道
+    slabPath(-28, 104.15, 33.2, 6.9);
+    slabPath(-28, 128.3, 7, 41.4);
     path(-28, 72, 7, 10);
     path(-28, 36, 8, 40);
     path(-28, -5, 5, 12, 0, m.path);
     // 校门内小广场（小门楼，不做圆形广场）
     path(-28, 147, 26, 9);
-    // 泮池两侧步道
+    // 泮池两侧步道；原东西两条灰黑直路取消，改为左右对称的宽斜向石板路汇入广场
     path(-28, 86, 34, 3.2);
-    path(-43, 95, 3.4, 16);
-    path(-13, 95, 3.4, 16);
+    slabPath(-42.58, 99.9, 17.0, 6.6, 0.415, .062);
+    slabPath(-13.42, 99.9, 17.0, 6.6, -0.415, .062);
+    // 两条斜路外端各向北直铺 10m（宽度仍 6.6m，与斜路同材质）
+    slabPath(-50.43, 91.54, 6.6, 10, 0, .064);
+    slabPath(-5.57, 91.54, 6.6, 10, 0, .064);
     // 教学楼群 2×2 之间的巷道
     path(-28, 43, 46, 4);
     path(-28, 2, 46, 3.4);
@@ -190,13 +206,15 @@ export class Campus {
     path(4, 139, 34, 4.6);
     path(22, 131, 15, 3.6);
     // 西侧通教学区与电教楼
-    path(-60, 20.5, 4, 89);              // 南端止于沁园下沉边界（z=-24）
+    // 原南北直路在水池段（z −10…18）取消，改环池园路，行人绕池走
+    path(-60, -17, 4, 14);               // 沁园以北段（南端 z=-10，让开池岸）
+    path(-60, 41.5, 4, 47);              // 水池以南段（z=18…65）
+    path(-69.6, 2.8, 2.6, 27.6);          // 环池西段 x −70.9…−68.3 / z −11.0…16.6
+    path(-66.2, -10.4, 9.4, 2.2);         // 环池北接 x −70.9…−61.5 / z −11.5…−9.3
+    path(-62.7, 17.2, 17.8, 2.4);         // 环池南接 x −71.6…−53.8 / z 16.0…18.4
     path(-60, -63, 4, 24);               // 电教楼南侧段（盆地以北）
     path(-59.2, -30.2, 3.6, 12.4, 0, m.roadStone, -.945); // 沁园东侧：门洞 → 窄颈桥东端
     path(-66.2, -40.6, 6.8, 2.4, 0, m.roadStone, -.945);  // 亭北石阶 → 拱桥西端（北岸园路）
-    // 东侧田径场西缘步道
-    path(30, 69, 5, 148);
-    path(80, -10, 86, 4.5);
     // 广场 / 体艺馆前广场
     path(28, -61, 74, 7);
     // 沁园与空中走廊一带
@@ -420,23 +438,89 @@ export class Campus {
     rimGeo.rotateX(-Math.PI / 2);
     const rim = new THREE.Mesh(rimGeo, m.stone);
     rim.position.y = -1; rim.receiveShadow = true; this.group.add(rim);
-    // 空中走廊：北端与电教楼南墙连成一体（无下行楼梯），南端接实验楼西北角
+    // 空中走廊：南端接实验楼西墙，北端贯穿电教楼东翼并从楼北面穿出（方塔东移贴廊东侧）
+    // 对照视频：两侧青砖矮墙 + 深色压顶 + 砖壁柱 + 梁式顶棚（梁间透光）+ 壁灯
     const cor = new THREE.Group();
-    const COR_LEN = 29.5;          // 北端贴电教楼南墙（z=-52），南端 19.5
-    const COR_SOUTH = 19.5;
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(4, .32, COR_LEN), m.slab);
-    deck.position.set(0, 5.2, 4.75); deck.castShadow = true; deck.receiveShadow = true; cor.add(deck);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(4.8, .22, COR_LEN + .8), m.roof);
-    roof.position.set(0, 8.4, 4.75); roof.castShadow = true; cor.add(roof);
-    const colGeos = [];
-    for (let i = 0; i <= 3; i++) {
-      const z = -9.5 + i * 4.75;
-      for (const s of [-1, 1]) colGeos.push(tbox(.34, 4.04, .34, s * 1.7, 3.02, z, 0));
+    cor.position.set(-54, 0, 0);
+    this.group.add(cor);
+    const COR_W = 4;
+    const COR_S = -22.5, COR_N = -100;             // 南端 / 北端（电教楼北立面）
+    const COR_LEN = COR_S - COR_N;
+    const COR_MID = (COR_S + COR_N) / 2;
+    const DECK_Y = 4.36, DECK_T = .32, DECK_BOT = DECK_Y - DECK_T;   // 廊面顶 / 底
+    const WALL_H = 1.35, WALL_T = .2, WALL_X = 1.9; // 矮墙中线（廊内净宽 3.6m）
+    const BAY = 4.75;
+    // 廊面（白石板）
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(COR_W, DECK_T, COR_LEN), m.slab);
+    deck.position.set(0, DECK_Y - DECK_T / 2, COR_MID);
+    deck.castShadow = true; deck.receiveShadow = true; cor.add(deck);
+    // 青砖贴图按面尺寸重复，避免砖块被拉伸
+    const brickMat = (rw, rh, color = 0xc0c5c2) => {
+      const mat = m.grayBrick.clone();
+      mat.map = m.grayBrick.map.clone();
+      mat.map.repeat.set(rw, rh);
+      mat.map.needsUpdate = true;
+      mat.color = new THREE.Color(color);
+      return mat;
+    };
+    // 两侧青砖矮墙 + 深色石压顶
+    for (const s of [-1, 1]) {
+      const wall = new THREE.Mesh(
+        new THREE.BoxGeometry(WALL_T, WALL_H, COR_LEN), brickMat(COR_LEN / 2.6, WALL_H / 2.0));
+      wall.position.set(s * WALL_X, DECK_Y + WALL_H / 2, COR_MID);
+      wall.castShadow = true; wall.receiveShadow = true; cor.add(wall);
+      const cope = new THREE.Mesh(new THREE.BoxGeometry(WALL_T + .14, .09, COR_LEN), m.stoneDark);
+      cope.position.set(s * WALL_X, DECK_Y + WALL_H + .045, COR_MID);
+      cope.castShadow = true; cor.add(cope);
     }
-    const colMesh = new THREE.Mesh(mergeGeometriesSafe(colGeos), m.plasterCool);
-    colMesh.castShadow = true; cor.add(colMesh);
+    // 通高砖柱：两旁柱子自廊面直抵廊顶（每 4.75m 一道，石柱础/柱头）
+    const pierZ = [];
+    for (let z = COR_N + 2.4; z <= COR_S - 2.4; z += BAY) pierZ.push(z);
+    const ROOF_Y = DECK_Y + 3.19 + .25;          // 7.8：梁顶 = 廊顶板底
+    const pierGeos = [], capGeos = [];
+    for (const z of pierZ) for (const s of [-1, 1]) {
+      pierGeos.push(tbox(.34, ROOF_Y - DECK_Y, .34, s * WALL_X, (DECK_Y + ROOF_Y) / 2, z));
+      capGeos.push(tbox(.46, .1, .46, s * WALL_X, DECK_Y + .05, z));
+      capGeos.push(tbox(.46, .1, .46, s * WALL_X, ROOF_Y - .05, z));
+    }
+    addMerged(cor, pierGeos, brickMat(.13, (ROOF_Y - DECK_Y) / 2.0));
+    addMerged(cor, capGeos, m.stoneDark);
+    // 梁式顶棚：跨廊灰砖梁
+    const beamGeos = [];
+    for (let z = COR_N + 1.1; z < COR_S - .4; z += 2.2) {
+      beamGeos.push(tbox(COR_W + .2, .5, .8, 0, DECK_Y + 3.19, z));
+    }
+    addMerged(cor, beamGeos, brickMat(COR_W / 2.6, .5 / 2.0, 0xacb1ae));
+    // 廊顶：整条走廊满铺蓝白色铁板（两侧折边 + 顺纹压条）
+    const roofDeck = new THREE.Mesh(new THREE.BoxGeometry(COR_W + .2, .1, COR_LEN + .4), m.metalBlue);
+    roofDeck.position.set(0, ROOF_Y + .05, COR_MID);
+    roofDeck.castShadow = true; roofDeck.receiveShadow = true; cor.add(roofDeck);
+    const roofTrim = [];
+    for (const s of [-1, 1]) roofTrim.push(tbox(.14, .18, COR_LEN + .4, s * 2.0, ROOF_Y + .1, COR_MID));
+    for (const x of [-1.2, 0, 1.2]) roofTrim.push(tbox(.07, .05, COR_LEN + .4, x, ROOF_Y + .13, COR_MID));
+    addMerged(cor, roofTrim, m.darkMetal);
+    // 穿楼段（电教楼东翼 z -100…-52）：楼体开槽高度（4.04…8.0）内补通高砖墙，封住槽口东立面
+    const PASS_Z0 = COR_N, PASS_Z1 = -52, PASS_TOP = 8.0;
+    const passGeos = [];
+    for (const s of [-1, 1]) {
+      passGeos.push(tbox(WALL_T, PASS_TOP - DECK_BOT, PASS_Z1 - PASS_Z0, s * WALL_X,
+        (DECK_BOT + PASS_TOP) / 2, (PASS_Z0 + PASS_Z1) / 2));
+    }
+    addMerged(cor, passGeos, brickMat((PASS_Z1 - PASS_Z0) / 2.6, (PASS_TOP - DECK_BOT) / 2.0));
+    // 壁灯（青砖墙内侧，隔一壁柱一盏）
+    const lampFrames = [], lampGlass = [];
+    const lampMat = m.wallLamp.clone();
+    lampMat.emissiveIntensity = 0; lampMat.userData.baseEmissive = 1.4;
+    for (let i = 0; i < pierZ.length; i += 2) {
+      const z = pierZ[i];
+      lampFrames.push(tbox(.2, .5, .24, -WALL_X + .12, DECK_Y + 1.5, z));
+      lampGlass.push(tbox(.1, .3, .1, -WALL_X + .14, DECK_Y + 1.5, z));
+    }
+    addMerged(cor, lampFrames, m.darkMetal);
+    const lampMesh = addMerged(cor, lampGlass, lampMat);
+    if (lampMesh) this.nightEmitters.push(lampMesh);
     // 南延段廊下：与廊面同材质的白石基座，中开桥洞（拱洞正对沁園门洞一侧步道）
-    const WZ0 = 9.5, WZ1 = COR_SOUTH, WTOP = 5.04, ACZ = 15.5, AR = 1.5, ASPRING = 2.0;
+    const WZ0 = -32.5, WZ1 = COR_S, WTOP = DECK_BOT, ACZ = -26.5, AR = 1.5, ASPRING = 2.0;
     const wallShape = new THREE.Shape();
     wallShape.moveTo(WZ0, 0); wallShape.lineTo(WZ1, 0);
     wallShape.lineTo(WZ1, WTOP); wallShape.lineTo(WZ0, WTOP); wallShape.closePath();
@@ -466,17 +550,139 @@ export class Campus {
     // 桥洞两侧石墙落地碰撞（洞口段留空可通行）
     for (const s of [-1, 1]) {
       const wx = -54 + s * 1.75;
-      this.colliders.push({ x: wx, z: -42 + 11.5, hx: .25, hz: 2.0 });
-      this.colliders.push({ x: wx, z: -42 + 18.5, hx: .25, hz: 1.0 });
+      this.colliders.push({ x: wx, z: -30.25, hx: .25, hz: 2.25 });
+      this.colliders.push({ x: wx, z: -23.75, hx: .25, hz: 1.25 });
     }
-    // 南端下行台阶（北端与电教楼相接，不设楼梯）
-    for (let i = 0; i < 8; i++) {
-      const st = new THREE.Mesh(new THREE.BoxGeometry(4, .3, 1.2), m.slab);
-      st.position.set(0, .15 + (5.0 - i * .62), COR_SOUTH + i * 1.1);
-      st.receiveShadow = true; cor.add(st);
+    // 廊下支撑柱（与白石基座同材，只在南段可见）
+    const colGeos = [];
+    for (const z of [-51.5, -46.75, -42, -37.25]) {
+      for (const s of [-1, 1]) colGeos.push(tbox(.34, DECK_BOT, .34, s * 1.6, DECK_BOT / 2, z));
     }
-    cor.position.set(-54, -1, -42);
-    this.group.add(cor);
+    addMerged(cor, colGeos, m.plasterCool);
+    // 台阶：单步 0.311m（≤0.35）；南端直跑 14 级；北端「方平台 → 东向一跑 → 方平台 → 北向落地」
+    const RISER = DECK_Y / 14, TREAD = .34;
+    const stepGeos = [], stairWallGeos = [], rampGeos = [], railGeos = [], bodyGeos = [];
+    // 圆截面石扶手（平滑）：平台矮墙沿墙顶直铺，梯段则用斜砌矮墙 + 顺坡扶手
+    const railX = (x0, x1, y, zc) => railGeos.push(
+      tcyl(.09, .09, Math.abs(x1 - x0), (x0 + x1) / 2, y, zc, 12, 0, 0, Math.PI / 2));
+    const railZ = (z0, z1, y, xc) => railGeos.push(
+      tcyl(.09, .09, Math.abs(z1 - z0), xc, y, (z0 + z1) / 2, 12, Math.PI / 2, 0, 0));
+    // 斜砌矮墙：顶面一次成形不随踏步锯齿，扶手顺坡压顶
+    const rampWall = (axis, a0, a1, yA, yB, c) => {
+      const asc = a0 <= a1;
+      const s0 = asc ? a0 : a1, s1 = asc ? a1 : a0;
+      const y0 = asc ? yA : yB, y1 = asc ? yB : yA;
+      const th = Math.atan2(Math.abs(y1 - y0), s1 - s0);
+      const len = Math.hypot(s1 - s0, y1 - y0);
+      const r = .075;
+      const my = (y0 + y1) / 2 + r / Math.cos(th);
+      const sh = new THREE.Shape();
+      sh.moveTo(s0, -.3); sh.lineTo(s1, -.3); sh.lineTo(s1, y1); sh.lineTo(s0, y0); sh.closePath();
+      const gg = new THREE.ExtrudeGeometry(sh, { depth: WALL_T, bevelEnabled: false });
+      if (axis === 'x') {
+        gg.translate(0, 0, c - WALL_T / 2);
+        railGeos.push(tcyl(r, r, len, (s0 + s1) / 2, my, c, 10, 0, 0, Math.atan2(-(s1 - s0), y1 - y0)));
+      } else {
+        gg.rotateY(-Math.PI / 2);
+        gg.translate(c + WALL_T / 2, 0, 0);
+        railGeos.push(tcyl(r, r, len, c, my, (s0 + s1) / 2, 10, Math.atan2(s1 - s0, y1 - y0), 0, 0));
+      }
+      rampGeos.push(gg);
+    };
+    for (let i = 0; i < 14; i++) {
+      const top = DECK_Y - (i + 1) * RISER;
+      const zc = COR_S + (i + .5) * TREAD;
+      stepGeos.push(tbox(COR_W, top, TREAD, 0, top / 2, zc));
+      for (const s of [-1, 1]) {
+        this.colliders.push({ x: -54 + s * WALL_X, z: zc, hx: .1, hz: TREAD / 2, y1: top + 1.44 });
+      }
+      this.walkSurfaces.push({
+        x0: -54 - WALL_X + .1, x1: -54 + WALL_X - .1, z0: COR_S + i * TREAD, z1: COR_S + (i + 1) * TREAD, y: top,
+      });
+    }
+    // 南端斜砌矮墙 + 顺坡圆石扶手（与北端同做法，墙顶不随踏步锯齿）
+    for (const s of [-1, 1]) rampWall('z', COR_S, COR_S + 14 * TREAD, DECK_Y + WALL_H, WALL_H, s * WALL_X);
+    // —— 北端 P1：突出北墙的 4×4 方平台（廊面标高 4.36m） ——
+    const P1Z0 = COR_N, P1Z1 = COR_N - 4, P1ZC = (P1Z0 + P1Z1) / 2;   // -100 ~ -104
+    const P1_S = DECK_Y + WALL_H;
+    stepGeos.push(tbox(COR_W, DECK_T, 4, 0, DECK_Y - DECK_T / 2, P1ZC));
+    bodyGeos.push(tbox(COR_W, DECK_BOT, 4, 0, DECK_BOT / 2, P1ZC));
+    // 西缘 / 北缘 / 东缘南段砖矮墙 + 圆石扶手（东缘北段敞开接东向梯，东缘南段贴方塔西面）
+    stairWallGeos.push(tbox(WALL_T, WALL_H, 4, -2, DECK_Y + WALL_H / 2, P1ZC));
+    railZ(P1Z1, P1Z0, P1_S, -2);
+    stairWallGeos.push(tbox(4.2, WALL_H, WALL_T, 0, DECK_Y + WALL_H / 2, P1Z1));
+    railX(-2.1, 2.1, P1_S, P1Z1);
+    stairWallGeos.push(tbox(WALL_T, WALL_H, 1.9, 2, DECK_Y + WALL_H / 2, -100.95));
+    railZ(-101.9, -100, P1_S, 2);
+    for (const c of [
+      { x: -56, z: P1ZC, hx: .1, hz: 2 },
+      { x: -54, z: P1Z1, hx: 2.1, hz: .1 },
+      { x: -52, z: -100.95, hx: .11, hz: .95 },
+    ]) this.colliders.push({ ...c, y0: DECK_Y, y1: P1_S + .09 });
+    this.walkSurfaces.push({ x0: -56, x1: -52, z0: P1Z1, z1: P1Z0, y: DECK_Y });
+
+    // —— P1 东缘向东一跑（沿方塔北立面）：7 级高差 / 6 级踏步 ——
+    const EZ0 = -101.6, EZ1 = -104, EZC = (EZ0 + EZ1) / 2;   // 梯带 z 范围（南缘即方塔北面）
+    const N1 = 6, N2 = 6;
+    const P2Y = DECK_Y - (N1 + 1) * RISER;                   // 第二平台标高 2.18m
+    for (let i = 0; i < N1; i++) {
+      const top = DECK_Y - (i + 1) * RISER;
+      const xc = 2 + (i + .5) * TREAD;
+      stepGeos.push(tbox(TREAD, top, EZ0 - EZ1, xc, top / 2, EZC));
+      this.colliders.push({ x: -54 + xc, z: EZ1 + .1, hx: TREAD / 2 + .01, hz: .1, y1: top + 1.44 });
+      this.walkSurfaces.push({
+        x0: -52 + i * TREAD, x1: -52 + (i + 1) * TREAD, z0: EZ1 + .1, z1: EZ0 + .1, y: top,
+      });
+    }
+    rampWall('x', 2, 2 + N1 * TREAD, DECK_Y - RISER + 1.35, P2Y + 1.35, EZ1 + .1);
+
+    // —— 北端 P2：第二个 4×4 方平台（东向梯东端，北缘接落地一跑） ——
+    const P2X0 = 2 + N1 * TREAD, P2X1 = P2X0 + 4;            // 局部 4.04 / 8.04
+    const P2Z0 = EZ0, P2Z1 = EZ0 - 4, P2ZC = (P2Z0 + P2Z1) / 2;
+    const P2_S = P2Y + 1.35;
+    stepGeos.push(tbox(4, .16, 4, (P2X0 + P2X1) / 2, P2Y - .08, P2ZC));
+    bodyGeos.push(tbox(4, P2Y - .16, 4, (P2X0 + P2X1) / 2, (P2Y - .16) / 2, P2ZC));
+    // 东缘、西缘北段、南缘方塔以东砖矮墙 + 圆石扶手（南缘西段即方塔北立面）
+    stairWallGeos.push(tbox(WALL_T, 1.35, 4, P2X1, P2Y + .675, P2ZC));
+    railZ(P2Z1, P2Z0, P2_S, P2X1);
+    stairWallGeos.push(tbox(WALL_T, 1.35, 1.6, P2X0, P2Y + .675, -104.8));
+    railZ(P2Z1, -104, P2_S, P2X0);
+    stairWallGeos.push(tbox(.88, 1.35, WALL_T, 7.67, P2Y + .675, -101.5));
+    railX(7.23, 8.11, P2_S, -101.5);
+    for (const c of [
+      { x: -54 + P2X1, z: P2ZC, hx: .1, hz: 2 },
+      { x: -54 + P2X0, z: -104.8, hx: .1, hz: .8 },
+      { x: -46.33, z: -101.5, hx: .44, hz: .1 },
+    ]) this.colliders.push({ ...c, y0: P2Y, y1: P2_S + .09 });
+    this.walkSurfaces.push({ x0: -54 + P2X0, x1: -54 + P2X1, z0: P2Z1, z1: -101.5, y: P2Y });
+
+    // —— P2 北缘向北一跑落地：7 级高差 / 6 级踏步 ——
+    for (let i = 0; i < N2; i++) {
+      const top = P2Y - (i + 1) * RISER;
+      const zc = P2Z1 - (i + .5) * TREAD;
+      stepGeos.push(tbox(4, top, TREAD, (P2X0 + P2X1) / 2, top / 2, zc));
+      for (const s of [-1, 1]) {
+        const wx = s < 0 ? P2X0 : P2X1;
+        this.colliders.push({ x: -54 + wx, z: zc, hx: .1, hz: TREAD / 2, y1: top + 1.44 });
+      }
+      this.walkSurfaces.push({
+        x0: -54 + P2X0, x1: -54 + P2X1, z0: P2Z1 - (i + 1) * TREAD, z1: P2Z1 - i * TREAD, y: top,
+      });
+    }
+    for (const wx of [P2X0, P2X1]) rampWall('z', P2Z1, P2Z1 - N2 * TREAD, P2Y + 1.35, 1.35, wx);
+    addMerged(cor, stepGeos, m.slab);
+    addMerged(cor, stairWallGeos, brickMat(.13, 2.2));
+    addMerged(cor, rampGeos, brickMat(1 / 2.6, 1 / 2.0));
+    addMerged(cor, railGeos, m.stoneDark);
+    addMerged(cor, bodyGeos, brickMat(COR_W / 2.6, 3.0));
+    // 廊面走面与两侧矮墙碰撞（矮墙只挡廊面上的人，廊下行人不受影响）
+    this.walkSurfaces.push({ x0: -54 - WALL_X + .1, x1: -54 + WALL_X - .1, z0: COR_N, z1: COR_S, y: DECK_Y });
+    for (const s of [-1, 1]) {
+      this.colliders.push({
+        x: -54 + s * WALL_X, z: COR_MID, hx: WALL_T / 2, hz: COR_LEN / 2,
+        y0: DECK_Y, y1: DECK_Y + WALL_H + .09,
+      });
+    }
   }
 
   _buildBuildings() {
@@ -576,6 +782,10 @@ export class Campus {
     this.academyPavilion = buildCornerPavilion(this.ctx);
     this.academyPavilion.position.set(-148, 0, 118.5);
     this.group.add(this.academyPavilion);
+    // 教学楼 SW 南侧竹林以南、校门以西草坪：视频 BV1Dx411v7jb t=150–179s 的六角灰瓦亭
+    this.academyEastPavilion = buildCornerPavilion(this.ctx);
+    this.academyEastPavilion.position.set(-63, 0, 94);
+    this.group.add(this.academyEastPavilion);
     this.zhufeng = buildZhufeng(this.ctx);
     this.zhufeng.position.set(22, 0, 122);
     this.zhufeng.scale.set(.5, .5, .5); // 长宽高统一缩至 1/2
@@ -586,7 +796,7 @@ export class Campus {
       { x: 22, z: 127.25, hx: 7, hz: .16 },       // 原南墙翻到北侧（楼后）
       { x: 22, z: 110.5, hx: 7, hz: .16 },        // 原北墙翻到南侧（院前）
       { x: 29, z: 118.875, hx: .16, hz: 8.375 },  // 原西墙翻到东侧（整段实墙）
-      { x: 15, z: 120.25, hx: .16, hz: 7.0 },     // 原东墙（无月洞门，113.25~127.25 连续实墙）
+      { x: 15, z: 120.25, hx: .16, hz: 7.0 },     // 原东墙（月洞门以北 113.25~127.25 连续实墙）
       { x: 15, z: 110.875, hx: .16, hz: .375 },   // 出院门北侧
       { x: 18, z: 113.75, hx: .65, hz: .65 },     // 石桌
     );
@@ -684,6 +894,11 @@ export class Campus {
       st.castShadow = true; st.receiveShadow = true; this.group.add(st);
       this.walkSurfaces.push({ x0: -56.3 - i * .4, x1: -55.9 - i * .4, z0: -49.75, z1: -48.45, y: top });
     }
+    // 自习室东南 / 大成殿西北：石桥水池（对照实景照片：绿水池、石岸、假山石、石灯笼、菱形镂空石栏平板桥）
+    this.studyPond = buildStudyPond(this.ctx);
+    this.group.add(this.studyPond);
+    this.colliders.push(...(this.studyPond.userData.colliders || []));
+    this.walkSurfaces.push(...(this.studyPond.userData.walkSurfaces || []));
     this._buildHillLandmarks();
     this.fudelang = buildFudelang(this.ctx, { x: 82.6, z: -60, plaque: this.mats.plaques.fude });
     // 富的廊：台基可走（y=.345），西端两级石阶自院落上廊；两侧美人靠不可穿越
@@ -700,16 +915,18 @@ export class Campus {
     buildFudeWestCourt(this.ctx, { x: 70.4, z: -69.1 });
     this.walkSurfaces.push({ x0: 70.5, x1: 85.5, z0: -76, z1: -62.2, y: .06 });
     this.colliders.push(
-      // 白墙实体长 15m、厚 .3m；与可视墙对齐，院门两侧墙段分开登记
-      { x: 70.4, z: -72.4, hx: .15, hz: 4.2 },
-      { x: 70.4, z: -65.35, hx: .15, hz: 4.45 },
+      // 白墙实体厚 .3m，中段留 2m 院门门洞（无匾额）；富的廊门楼独立在廊道西口前
+      { x: 70.4, z: -73.3, hx: .15, hz: 3.3 },
+      { x: 70.4, z: -64.8, hx: .15, hz: 3.2 },
+      { x: 70.3, z: -61.3, hx: .35, hz: .45 },  // 富的廊门楼北垛
+      { x: 70.3, z: -58.7, hx: .35, hz: .45 },  // 富的廊门楼南垛
       { x: 71.12, z: -74, hx: .32, hz: 1.0 },
       { x: 71.12, z: -66, hx: .32, hz: 1.0 },
       { x: 75.6, z: -73.3, hx: .28, hz: .28 },
       { x: 79.0, z: -65.7, hx: .28, hz: .28 },
       { x: 82.6, z: -70.9, hx: .28, hz: .28 },
-      { x: 71.02, z: -63.7, hx: .42, hz: .32 },
-      { x: 71.02, z: -62.5, hx: .42, hz: .32 },
+      { x: 69.4, z: -61.4, hx: .42, hz: .32 },  // 石狮（富的廊门北）
+      { x: 69.4, z: -58.6, hx: .42, hz: .32 },  // 石狮（富的廊门南）
     );
     // 梓荫阁围墙内西侧六角亭（200–239s）：白墙嵌石碑、两面美人靠、两面格栅，开口朝东入亭
     const hexPav = buildHexPavilion(this.ctx);
@@ -731,17 +948,22 @@ export class Campus {
       // 教学楼群：围绕大成殿/大成门的 2×2 布局，严格关于中轴 x=-28.5 镜像
       // 平面为 L 形：南半段贴中轴（进深 7.5m、宽 30m），北半段向远离中轴方向内收 4m（宽 26m）
       // 形成「靠中轴一侧南凸北凹」；四栋均四层，主体高度不变
-      { x: -59, z: 31.5, w: 30, d: 15, key: 'teach4', name: '教学楼', floors: 4, lshape: true, walkIn: true },
-      { x: 2, z: 31.5, w: 30, d: 15, key: 'teach4', name: '教学楼', floors: 4, lshape: true, walkIn: true },
-      { x: -59, z: 59.5, w: 30, d: 15, key: 'teach4', name: '教学楼', floors: 4, lshape: true },
-      { x: 2, z: 59.5, w: 30, d: 15, key: 'teach4', name: '教学楼', floors: 4, lshape: true, walkIn: true },
+      { x: -59, z: 31.5, w: 30, d: 15, key: 'teachMain', name: '教学楼', floors: 4, lshape: true, walkIn: true },
+      { x: 2, z: 31.5, w: 30, d: 15, key: 'teachMain', name: '教学楼', floors: 4, lshape: true, walkIn: true },
+      { x: -59, z: 59.5, w: 30, d: 15, key: 'teachMain', name: '教学楼', floors: 4, lshape: true, walkIn: true, bare: true },
+      { x: 2, z: 59.5, w: 30, d: 15, key: 'teachMain', name: '教学楼', floors: 4, lshape: true, walkIn: true },
       // 实验楼：东西向 4 层长方体（平屋面），中部另起第 5 层灰瓦大坡屋顶，两端为南向 2 层翼楼
       // 东端不动（x=0），西端自 -56 东移 5m 至 -51，露出空中走廊南端下行台阶
       { x: -25.5, z: -22, w: 51, d: 18, key: 'lab4', name: '实验楼', floors: 4, flatRoof: true },
       // 电教楼：回字形平面（外 47×48，内院 20×20），白色平屋顶（视频 58-78s）
       // 东西两块 5 层、南北两块 5.5 层；塔楼东北角、穹顶西南角（6.5 层）
       // 南侧入口雨棚/玻璃中庭取消：该轴在书吧东墙处，构件半埋入书吧、在夹角处外凸成杂物
-      { x: -77, z: -76, w: 47, d: 48, court: 20, key: 'lab', name: '电教楼', floors: 5, floorsNS: 5.5, ring: true, entrance: false },
+      // 东翼东墙整体加厚 1.5m（局部 x 到 25，即世界 x=-52），并在空中走廊穿越处开全进深槽口
+      // 槽口 x 21..25（世界 -56..-52，与廊宽一致）、y 4.04..8.0（廊底至梁顶），楼体被廊体真实贯穿
+      {
+        x: -77, z: -76, w: 47, d: 48, court: 20, key: 'lab', name: '电教楼', floors: 5, floorsNS: 5.5, ring: true, entrance: false,
+        thickenE: 1.5, slot: { x0: 21, x1: 25, y0: 4.04, y1: 8.0 },
+      },
       { x: -71, z: -17, w: 15, d: 10, name: '自习室', custom: 'study' },
       { x: -84.5, z: -44, w: 14, d: 16, name: '书吧', custom: 'book' },
       // 北区
@@ -772,6 +994,7 @@ export class Campus {
           entrance: false,  // 南立面雨棚门斗按标注取消
           roofH: 1.15,      // 坡高按宽度等比收，保持与北块屋顶同一坡度
           openInterior: !!d.walkIn,
+          noBase: true,     // 青砖墙裙直达地面
         });
         const ogSide = -away;
         // 首层靠花池一侧（L 形缺口那 18m）敞开：三栋有内景的由内景模块拆墙，SW 由体量掏空
@@ -782,6 +1005,8 @@ export class Campus {
           entrance: false, // 北块南墙贴南块，重复入口雨棚会插进室内
           openInterior: !!d.walkIn,
           openGround: d.walkIn ? null : { x0: ogX0, x1: ogX1 },
+          noFrontBand: !!d.walkIn, // 二层及以上前脸为开敞外廊
+          noBase: true,            // 青砖墙裙直达地面
         });
         if (d.walkIn) {
           // 内景按手绘草图：北条 3 教室 + 两端楼梯 + 南侧走廊；南块单教室
@@ -789,11 +1014,11 @@ export class Campus {
           const connX = connectSide * (nbW / 2 - 1.2);
           decorateNorthBlock(this.ctx, nb, {
             by: .8, fby: 0, w: nbW, d: half, floors: d.floors || 4,
-            bbSide: 1, connectSide,
+            bbSide: 1, connectSide, bare: !!d.bare,
           });
           decorateSouthBlock(this.ctx, b, {
             by: .8, fby: 0, w: sW, d: half, floors: d.floors || 4,
-            bbSide: -1, connectX: nbX + connX - sX, sharedW: 8,
+            bbSide: -1, connectX: nbX + connX - sX, sharedW: 8, bare: !!d.bare,
           });
           this._registerInterior(nb);
           d.cols = [];
@@ -801,13 +1026,6 @@ export class Campus {
           // 北块首层前脸已掏空：只登记后部/东端实体、方柱与 0.8m 基座外沿（跳上基座可进廊）
           const og = nb.userData.openGround;
           d.cols = [];
-          // SW 无内景、东西山墙无窗：左右共享同一材质，整面换成墙色（去掉画出来的窗）
-          for (const gg of [b, nb]) {
-            const spw = gg.userData.sidePlanes;
-            if (!spw) continue;
-            gg.userData.leftFacade = spw.left.material;
-            punchFacade(gg, 'left', half, (d.floors || 4) * 3.45 + 1.2, 0, [], false, WALL_FILL);
-          }
           this.colliders.push({
             x: sX, z: sbZ, hx: sW / 2, hz: half / 2,
           }, {
@@ -934,7 +1152,9 @@ export class Campus {
     for (let i = 0; i <= 8; i++) this.colliders.push({ x: 11.28, z: 6.4 - i * (26.4 / 8), hx: .25, hz: .25 });
     for (let i = 0; i <= 4; i++) this.colliders.push({ x: -0.3 + i * (12.6 / 4), z: 8.12, hx: .25, hz: .25 });
     // 红廊与篮球场之间的铁栅栏（样式同梓荫山 D 线，二维平面）
-    buildFenceRun(this.ctx, [[16.4, -30], [16.4, 33.5]], true);
+    buildFenceRun(this.ctx, [[35, -15], [18, -15], [18, 33.5]], true);
+    // 排球场西缘＋南缘铁栅栏（同上二维平面样式，贴场地边线转东至跑道）
+    buildFenceRun(this.ctx, [[16.9, 85], [16.9, 109.7], [30, 109.7], [30, 125]], true);
     this.science = this.teach[8];
     this.complex = this.teach[7];
     this.labHall = this.teach[4];
@@ -954,24 +1174,23 @@ export class Campus {
       { x: 12.45, z: 145.2, hx: .4, hz: .4 }, { x: 21.55, z: 145.2, hx: .4, hz: .4 },
     );
     this.track = buildTrack(this.ctx);
-    // 司令台：buildTrack 内按局部坐标 (-52,-11) 建台，group 偏移 (80,69)，实际位于 (28,58)
-    // 台面与南北两端楼梯可走（整体旋转 90°，自东向西上台）
+    // 台面与南北两端楼梯可走
     this.walkSurfaces.push(
-      { x0: 24, x1: 32, z0: 45.95, z1: 70.05, y: 1.4 },                    // 台面
-      { x0: 24, x1: 26.45, z0: 42.65, z1: 46.1, y: 1.4 },                  // 北端平台
-      { x0: 24, x1: 26.45, z0: 70.0, z1: 73.35, y: 1.4 },                  // 南端平台
-      { x0: 26.3, x1: 29.9, z0: 42.7, z1: 45.9, yA: 1.4, yB: 0, axis: 'x' }, // 北端楼梯
-      { x0: 26.3, x1: 29.9, z0: 70.1, z1: 73.3, yA: 1.4, yB: 0, axis: 'x' }, // 南端楼梯
+      { x0: 21, x1: 29, z0: 50.95, z1: 75.05, y: 1.4 },                    // 台面
+      { x0: 21, x1: 23.45, z0: 47.65, z1: 51.1, y: 1.4 },                  // 北端平台
+      { x0: 21, x1: 23.45, z0: 75.0, z1: 78.35, y: 1.4 },                  // 南端平台
+      { x0: 23.3, x1: 26.9, z0: 47.7, z1: 50.9, yA: 1.4, yB: 0, axis: 'x' }, // 北端楼梯
+      { x0: 23.3, x1: 26.9, z0: 75.1, z1: 78.3, yA: 1.4, yB: 0, axis: 'x' }, // 南端楼梯
     );
     // 司令台正面木栏（台面上不可翻越）
-    this.fenceSegments.push([[31.9, 46.1], [31.9, 69.9], 2.55]);
+    this.fenceSegments.push([[28.9, 51.1], [28.9, 74.9], 2.55]);
     // 操场北侧 5 层灰白阳台宿舍（45.05）：真实位置在梓荫山东侧、紧贴 F 线雾墙中段，横向布置，外廊朝南
     this.neDorm = buildModernBlock(this.ctx, { x: 157, z: -36, w: 39, d: 18, floors: 5, key: 'dorm', corridor: true, railMat: this.mats.plasterCool });
     // 宿舍东端接不到东侧雾墙，沿南立面延长一段铁栅栏补齐；右上（东北）草坪此后不可进入
     buildFenceRun(this.ctx, [[176.5, -27], [197.5, -27.3]]);
-    // 流芳碑
-    this.liufang = addStele(this.group, this.mats, -54, 112, { w: 1.9, h: 4.2, d: .55, textMat: this.mats.plaques.liufang });
-    this.liufang.rotation.y = .12;
+    // 流芳碑：泮池北红点处（东段草坪），有字一面朝北
+    this.liufang = addStele(this.group, this.mats, -16.3, 83.1, { w: 1.9, h: 4.2, d: .55, textMat: this.mats.plaques.liufang });
+    this.liufang.rotation.y = Math.PI;
     // 科学楼北端→电教楼接壤处小门造型，铺白石板小路至书吧西侧
     this._buildScienceDoor();
     // 小人碰撞体（平面矩形，忽略小幅旋转）；电教楼为回字形，按四块翼楼分别登记
@@ -981,11 +1200,13 @@ export class Campus {
       else this.colliders.push({ x: d.x, z: d.z, hx: d.w / 2, hz: d.d / 2 });
     }
     this.colliders.push(
-      { x: -60.25, z: -76, hx: 6.75, hz: 24 },  // 电教楼东块（5 层）
-      { x: -93.75, z: -76, hx: 6.75, hz: 24 },  // 电教楼西块（5 层）
-      { x: -77, z: -59, hx: 10, hz: 7 },        // 电教楼南块（5.5 层）
-      { x: -77, z: -93, hx: 10, hz: 7 },        // 电教楼北块（5.5 层）
-      { x: -54.4, z: -99, hx: 2.6, hz: 2.6 },  // 电教楼东北角塔楼（凸出主体约 1.5m）
+      { x: -61.5, z: -76, hx: 5.5, hz: 24 },       // 电教楼东块西段（全高实心）
+      { x: -54, z: -76, hx: 2, hz: 24, y1: 4.04 }, // 东块廊体槽下（廊底以下实心）
+      { x: -54, z: -76, hx: 2, hz: 24, y0: 8.0 },  // 东块廊体槽上（梁顶以上实心）
+      { x: -93.75, z: -76, hx: 6.75, hz: 24 },     // 电教楼西块（5 层）
+      { x: -77, z: -59, hx: 10, hz: 7 },           // 电教楼南块（5.5 层）
+      { x: -77, z: -93, hx: 10, hz: 7 },           // 电教楼北块（5.5 层）
+      { x: -49.3, z: -99, hx: 2.6, hz: 2.6 },      // 东北角方塔（东移至廊体东侧，贴 x=-52）
       // 大成殿：殿身按墙体分段登记，正面中央门洞保持通行
       { x: -28, z: 3.61, hx: 13.05, hz: .25 },      // 后墙
       { x: -41.05, z: 10, hx: .25, hz: 6.39 },      // 西墙
@@ -1009,23 +1230,66 @@ export class Campus {
       // 主馆基座仍以 y1=.9 的碰撞封住室外地面，馆内 .9 走面以上不受影响
       { x: 157, z: -36, hx: 19.5, hz: 9 }, // 操场北侧宿舍（梓荫山东侧，横向，紧贴 F 线雾墙）
       { x: -148, z: 118.5, hx: 2.7, hz: 2.7 }, // 蛟川书院西南角小亭（西副楼南侧）
+      { x: -63, z: 94, hx: 2.7, hz: 2.7 },     // 教学楼 SW 南侧竹林以南六角亭
       // 朱枫故居主体与院墙已在上方分段登记；此处不再用整块包围盒堵住院门
       { x: -42.9, z: 137.5, hx: 3.6, hz: 2.6 }, // 保安亭
       { x: -13.1, z: 137.5, hx: 3.6, hz: 2.6 }, // 报刊亭
-      // 泮池四格水面（三条步道保持通行）
-      { x: -39.58, z: 90, hx: 3.43, hz: 4.25 },
-      { x: -31.84, z: 90, hx: 3.06, hz: 4.25 },
-      { x: -24.16, z: 90, hx: 3.06, hz: 4.25 },
-      { x: -16.43, z: 90, hx: 3.43, hz: 4.25 },
-      { x: -54, z: 112, hx: 1.2, hz: .7 }, // 流芳碑
+      { x: -16.3, z: 83.1, hx: 1.2, hz: .7 }, // 流芳碑（泮池北红点处）
+    );
+    // 泮池水面：按可见扇形水面逐条（0.5m）登记，贴合弧形水岸；桥下单独放行。
+    // 旧的整块矩形（hz=4.25 铺满南北）会在两端越过水面、封掉池外弧形石铺装。
+    {
+      const W2 = 15, DEP = 8.5;
+      const R = (W2 * W2 + DEP * DEP) / (2 * DEP);
+      const CY = R - DEP / 2;
+      const zChord = 90 - DEP / 2; // 85.75 北侧直弦
+      // 三条石板步道全部改为同型单拱石桥，水面连成一片；桥下水面碰撞按 y1 处理
+      const spans = [[-15, 15]];
+      const bridgeXs = [-7.55, 0, 7.55];
+      for (const [a, b] of spans) {
+        const n = Math.max(1, Math.ceil((b - a) / .5));
+        for (let i = 0; i < n; i++) {
+          const lx0 = a + (b - a) * i / n, lx1 = a + (b - a) * (i + 1) / n;
+          const lx = (lx0 + lx1) / 2;
+          if (bridgeXs.some((cx) => Math.abs(lx - cx) < 1.15)) continue; // 桥面正下方不重复登记
+          const z1 = 90 - CY + Math.sqrt(Math.max(0, R * R - lx * lx)) + .04; // 弧线南缘
+          this.colliders.push({
+            x: -28 + lx, z: (zChord + z1) / 2,
+            hx: (lx1 - lx0) / 2 + .01, hz: (z1 - zChord) / 2,
+          });
+        }
+      }
+      // 三座桥下水面：地面高度阻挡，桥面/踏步高度（≥.16）放行
+      for (const cx of bridgeXs) {
+        this.colliders.push({ x: -28 + cx, z: 90, hx: 1.15, hz: 4.75, y1: .14 });
+      }
+    }
+    // 三座同型单拱石桥走面：桥头踏步 .16 → 桥面 .32~1.37
+    for (const cx of [-7.55, 0, 7.55]) {
+      const x0 = -28 + cx - 1.15, x1 = -28 + cx + 1.15, n = 12, za = 85.2, zb = 94.8;
+      this.walkSurfaces.push({ x0, x1, z0: 84.7, z1: 85.2, y: .16 });
+      for (let i = 0; i < n; i++) {
+        const z0 = za + (zb - za) * i / n, z1 = za + (zb - za) * (i + 1) / n;
+        this.walkSurfaces.push({
+          x0, x1, z0, z1, axis: 'z',
+          yA: .32 + 1.05 * Math.sin(Math.PI * i / n),
+          yB: .32 + 1.05 * Math.sin(Math.PI * (i + 1) / n),
+        });
+      }
+      this.walkSurfaces.push({ x0, x1, z0: 94.8, z1: 95.3, y: .16 });
+    }
+    this.colliders.push(
+      { x: -28, z: 97.8, hx: 1.2, hz: 1.2 },    // 旗杆大理石基座（与可见基座对齐）
+      { x: -28, z: 99.25, hx: 2.65, hz: .3 },   // 校训石碑（原白石条凳位置）
       // 梓荫山建筑群
       { x: 111, z: -44.83, hx: 4, hz: 3.2 },   // 梓荫阁（含台基，缩至 2/3 后）
       { x: 70, z: -46.5, hx: 2.4, hz: 2.4 }, // 吴公纪功碑亭
       { x: 127, z: -35.5, hx: 2.2, hz: 5.5 }, // 惩忿窒欲石刻、石台与四尊石武将
       { x: 121, z: -23.5, hx: 2.2, hz: 2.2 }, // 四角亭（高台东南脚草地，D 路北侧）
       // 司令台：台面可走，仅后墙和正面木栏为实体（世界坐标 = 局部坐标 + group 偏移 80,69）
-      { x: 24.5, z: 58, hx: .55, hz: 12 },
+      { x: 21.5, z: 63, hx: .55, hz: 12 },
       // 篮球架立柱（世界坐标 = buildTrack 局部坐标 + 偏移 80,69）
+      { x: 43.5, z: 69, hx: 1.2, hz: 1.2 }, // 田径场国旗旗杆基座（西直道内侧草地）
       { x: 30, z: -12, hx: .3, hz: .3 },
       { x: 30, z: 10, hx: .3, hz: .3 },
       { x: 29, z: 15, hx: .3, hz: .3 },
@@ -1065,7 +1329,7 @@ export class Campus {
     // 深色出挑平板顶（视频中顶板平直、四周出挑）
     const cap = new THREE.Mesh(new THREE.BoxGeometry(tw + 2.6, .55, tw + 2.6), m.ridge);
     cap.position.y = th + .275; cap.castShadow = true; sq.add(cap);
-    sq.position.set(22.6, 0, -23);
+    sq.position.set(27.7, 0, -23);   // 东移至廊体东侧（世界 x=-49.3），紧贴电教楼加厚后的东立面
     block.add(sq);
     // 圆形天文台：坐落在西南角 5 层块屋面（18.55），顶与塔楼同为 6.5 层
     const rd = new THREE.Group();
@@ -1561,16 +1825,17 @@ export class Campus {
       }
       pos.needsUpdate = true;
     }
-    if (this.ctx.flag && this.ctx.flagGeo) {
-      const pos = this.ctx.flagGeo.attributes.position;
+    // 旗面飘动：泮池旗杆与田径场旗杆共用同一套波形
+    const flutter = (geo, phase) => {
+      const pos = geo.attributes.position;
       for (let i = 0; i < pos.count; i++) {
         const x = pos.getX(i);
-        const y = pos.getY(i);
-        const wave = Math.sin(x * 2.2 + t * 3.2) * (.18 + (x + 2.1) * .03);
-        pos.setZ(i, wave);
+        pos.setZ(i, Math.sin(x * 2.2 + t * 3.2 + phase) * (.18 + (x + 2.1) * .03));
       }
       pos.needsUpdate = true;
-    }
+    };
+    if (this.ctx.flagGeo) flutter(this.ctx.flagGeo, 0);
+    if (this.ctx.fieldFlagGeo) flutter(this.ctx.fieldFlagGeo, .9);
     // water ripple
     if (this.mats.waterNormal) {
       this.mats.waterNormal.offset.x = (t * .012) % 1;

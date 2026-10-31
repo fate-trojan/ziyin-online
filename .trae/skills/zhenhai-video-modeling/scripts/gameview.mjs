@@ -1,7 +1,7 @@
 // 游戏内截图：node gameview.mjs <posX,posY,posZ> <tgtX,tgtY,tgtZ> <out.png> [time] [ui]
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
-const require = createRequire('/Users/chenxuhang/myproject/work/zhenhai-campus/package.json');
+const require = createRequire('/Users/chenxuhang/myproject/work/ziyin-online/package.json');
 const { chromium } = require('playwright-core');
 
 const pos = process.argv[2].split(',').map(Number);

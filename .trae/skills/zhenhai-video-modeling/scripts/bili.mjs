@@ -2,7 +2,7 @@
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
-const require = createRequire('/Users/chenxuhang/myproject/work/zhenhai-campus/package.json');
+const require = createRequire('/Users/chenxuhang/myproject/work/ziyin-online/package.json');
 const { chromium } = require('playwright-core');
 
 const START = Number(process.argv[2] || 0);

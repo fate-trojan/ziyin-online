@@ -32,7 +32,8 @@ function CM() {
     desk: std(0xc79a60, { emissiveIntensity: .2, roughness: .8 }),
     chair: std(0xb4875a, { emissiveIntensity: .2 }),
     steel: std(0x555b59, { emissiveIntensity: .12, metalness: .45, roughness: .5 }),
-    frame: std(0xdfe0da, { emissiveIntensity: .3, metalness: .1, roughness: .6 }),
+    frame: std(0x7a4530, { emissiveIntensity: .3, metalness: .1, roughness: .6 }),
+    frameInner: std(0xefe9da, { emissiveIntensity: .3, metalness: .1, roughness: .6 }),
     sill: std(0xd7d5cc, { emissiveIntensity: .2 }),
     door: std(0xe8e6dd, { emissiveIntensity: .26, roughness: .65 }),
     doorFrame: std(0x92948f, { emissiveIntensity: .16, metalness: .25, roughness: .55 }),
@@ -41,6 +42,9 @@ function CM() {
     nosing: std(0xd7a52a, { emissiveIntensity: .35 }),
     rail: std(0x2c231b, { emissiveIntensity: .12 }),
     handrail: std(0xd08a26, { emissiveIntensity: .2, metalness: .3, roughness: .5 }),
+    // 教学楼外廊：栏板木黄灰、扶手褐色（视频内景视角）
+    railWood: std(0xb8b48f, { emissiveIntensity: .12, roughness: .85 }),
+    railHand: std(0x6b4128, { emissiveIntensity: .16, metalness: .1, roughness: .6 }),
     curtain: std(0xc6ae86, { emissiveIntensity: .1, roughness: .95 }),
     notice: std(0xdfe6e3, { emissiveIntensity: .2 }),
     noticeFrame: std(0x4c6f86, { emissiveIntensity: .14 }),
@@ -109,7 +113,7 @@ function windowWallX(B, M, o) {
     ]) B.box(M.frame, fw, fh, t + .05, fx, fy, zc);
     const n = Math.max(1, Math.round(gw / 1.5));
     for (let i = 1; i < n; i++) {
-      B.box(M.frame, .05, gh, t + .04, a + .05 + (gw / n) * i, y0 + (sill + head) / 2, zc);
+      B.box(M.frameInner, .05, gh, t + .04, a + .05 + (gw / n) * i, y0 + (sill + head) / 2, zc);
     }
     B.box(M.sill, b - a + .16, .05, .2, (a + b) / 2, y0 + sill - .03, zc + inward * (t / 2 + .08));
     if (curtain) {
@@ -275,7 +279,7 @@ function entranceSteps(B, M, walks, x, zWall, y, width = 2.4) {
 /* 在立面贴图上挖透明门洞：x 为建筑局部坐标，y 为相对立面底 fby 的绝对高度
  * mirror：背面立面绕 Y 转了 180°，贴图 u 方向与局部 x 相反
  * fill：给定时整面重绘为该墙色——内景已开真实门窗的墙面不再保留贴图上画出来的窗 */
-export function punchFacade(g, which, w, h, fby, rects, mirror = false, fill = null) {
+export function punchFacade(g, which, w, h, fby, rects, mirror = false, fill = null, fillKeep = 0) {
   const mat = g.userData[which + 'Facade'];
   if (!mat || !mat.map || !mat.map.image) return;
   const paint = (old) => {
@@ -283,8 +287,12 @@ export function punchFacade(g, which, w, h, fby, rects, mirror = false, fill = n
     const cv = document.createElement('canvas');
     cv.width = img.width; cv.height = img.height;
     const ctx = cv.getContext('2d');
-    if (fill) { ctx.fillStyle = fill; ctx.fillRect(0, 0, cv.width, cv.height); }
-    else ctx.drawImage(img, 0, 0);
+    ctx.drawImage(img, 0, 0);
+    if (fill) {
+      // fillKeep：自底保留的贴图高度（米，青砖墙裙），重绘白墙时不要盖掉
+      const cut = fillKeep > 0 ? cv.height - (fillKeep / h) * cv.height : cv.height;
+      ctx.fillStyle = fill; ctx.fillRect(0, 0, cv.width, cut);
+    }
     const repX = old.repeat.x, offX = old.offset.x;
     for (const r of rects) {
       const ux0 = mirror ? 1 - (r.x1 + w / 2) / w : (r.x0 + w / 2) / w;
@@ -320,7 +328,7 @@ export function punchFacade(g, which, w, h, fby, rects, mirror = false, fill = n
 export function decorateNorthBlock(ctx, g, opts) {
   const {
     by = .8, fby = 0, w = 26, d = 7.5, floors = 4,
-    bbSide = 1, connectSide = 1,
+    bbSide = 1, connectSide = 1, bare = false, // bare：毛坯房，室内不放任何家具/装饰
   } = opts;
   const M = CM(), B = new Batch(g), cols = [], walks = [];
   const FY = by + .06;
@@ -356,7 +364,7 @@ export function decorateNorthBlock(ctx, g, opts) {
     // 楼板
     B.box(M.floor, roomX1 - roomX0 + .2, .16, corZ1 - roomZ0 + .2, (roomX0 + roomX1) / 2, y - .08, (roomZ0 + corZ1) / 2);
     // 走廊彩色分带（水磨石地面上的橙红导视带）
-    B.box(M.floorBand, roomX1 - roomX0 - .2, .012, .28, (roomX0 + roomX1) / 2, y + .006, zS - WT - .42);
+    if (!bare) B.box(M.floorBand, roomX1 - roomX0 - .2, .012, .28, (roomX0 + roomX1) / 2, y + .006, zS - WT - .42);
     // 教室隔墙（走廊侧）：留 1.3m 门洞
     for (let i = 0; i < 3; i++) {
       const x0 = rb[i], x1 = rb[i + 1];
@@ -364,19 +372,21 @@ export function decorateNorthBlock(ctx, g, opts) {
       if (a > x0 + .01) solidWallX(B, M, x0, a, corridorZ, IT, y);
       if (b < x1 - .01) solidWallX(B, M, b, x1, corridorZ, IT, y);
       lintelX(B, M, a, b, corridorZ, IT, y);
-      doorAt(B, M, { dir: 'x', c: corridorZ, along: (a + b) / 2, y, w: 1.3, inward: -1 });
+      if (!bare) doorAt(B, M, { dir: 'x', c: corridorZ, along: (a + b) / 2, y, w: 1.3, inward: -1 });
       // 走廊侧瓷砖墙裙
       if (a > x0 + .01) B.box(M.tile, a - x0 - .04, 1.05, .02, (x0 + a) / 2, y + .525, corZ0 + .012);
       if (b < x1 - .01) B.box(M.tile, x1 - b - .04, 1.05, .02, (b + x1) / 2, y + .525, corZ0 + .012);
       // 教室侧墙裙
       if (a > x0 + .01) B.box(M.tile, a - x0 - .04, 1.0, .02, (x0 + a) / 2, y + .5, roomZ1 - .012);
       if (b < x1 - .01) B.box(M.tile, x1 - b - .04, 1.0, .02, (b + x1) / 2, y + .5, roomZ1 - .012);
-      // 公告栏
-      B.box(M.noticeFrame, 1.26, .86, .05, (x0 + x1) / 2, y + 1.95, corZ0 + .04);
-      B.box(M.notice, 1.14, .74, .02, (x0 + x1) / 2, y + 1.95, corZ0 + .075, false);
-      // 走廊吸顶灯
-      pendant(B, M, x0 + rw * .28, y + CH - .02, zS - corridorD * .45, .95);
-      pendant(B, M, x0 + rw * .72, y + CH - .02, zS - corridorD * .45, .95);
+      if (!bare) {
+        // 公告栏
+        B.box(M.noticeFrame, 1.26, .86, .05, (x0 + x1) / 2, y + 1.95, corZ0 + .04);
+        B.box(M.notice, 1.14, .74, .02, (x0 + x1) / 2, y + 1.95, corZ0 + .075, false);
+        // 走廊吸顶灯
+        pendant(B, M, x0 + rw * .28, y + CH - .02, zS - corridorD * .45, .95);
+        pendant(B, M, x0 + rw * .72, y + CH - .02, zS - corridorD * .45, .95);
+      }
     }
     // 教室隔墙（互相之间）
     for (const x of [rb[1], rb[2]]) {
@@ -398,19 +408,21 @@ export function decorateNorthBlock(ctx, g, opts) {
       if (s === connectSide) continue;
       B.box(M.wall, IT, CH, corZ1 - zDoor1, xw, y + CH / 2, (zDoor1 + corZ1) / 2);
       lintelZ(B, M, zDoor0, zDoor1, xw, IT, y);
-      doorAt(B, M, { dir: 'z', c: xw, along: (zDoor0 + zDoor1) / 2, y, w: .9, inward: s });
+      if (!bare) doorAt(B, M, { dir: 'z', c: xw, along: (zDoor0 + zDoor1) / 2, y, w: .9, inward: s });
       collider(cols, xw, (zDoor1 + corZ1) / 2, IT / 2, (corZ1 - zDoor1) / 2, y, y + CH, .22);
       collider(cols, xw, (zDoor0 + zDoor1) / 2, IT / 2, (zDoor1 - zDoor0) / 2, y + 2.15, y + FH, .22);
     }
     // 北外墙（教室窗 + 楼梯间窗）
     const northOps = [];
     for (let i = 0; i < 3; i++) northOps.push([rb[i] + .45, rb[i + 1] - .45]);
-    windowWallX(B, M, { x0: roomX0, x1: roomX1, zc: zN + WT / 2, t: WT, y0: y, ops: northOps, sill: 1.0, head: 2.62, inward: 1, curtain: true });
+    windowWallX(B, M, { x0: roomX0, x1: roomX1, zc: zN + WT / 2, t: WT, y0: y, ops: northOps, sill: 1.0, head: 2.62, inward: 1, curtain: !bare });
     for (const st of stairs) {
       windowWallX(B, M, { x0: Math.min(st.a, st.b), x1: Math.max(st.a, st.b), zc: zN + WT / 2, t: WT, y0: y, ops: [[Math.min(st.a, st.b) + .2, Math.max(st.a, st.b) - .2]], sill: 1.55, head: 2.9, inward: 1 });
     }
-    // 南外墙：外露走廊段（首层不带墙——敞开外廊 + 方柱；上层照旧开窗）
+    // 南外墙：外露走廊段（首层敞开外廊 + 方柱；二层及以上为开敞外廊 + 栏板）
     // 2026-10-25 用户指令：一楼靠花池一侧的墙拆掉，台阶做成长条形、与墙同长
+    // 外廊外缘楼板（原外墙位置），承托栏板与通行
+    B.box(M.floor, exposed1 - exposed0, .16, WT + .02, (exposed0 + exposed1) / 2, y - .08, zS - WT / 2);
     if (f === 0) {
       const nCol = Math.max(2, Math.round((exposed1 - exposed0) / 3.9));
       for (let i = 0; i <= nCol; i++) {
@@ -428,16 +440,12 @@ export function decorateNorthBlock(ctx, g, opts) {
       }
       walkRect(walks, exposed0, exposed1, zS - .3, zS + .02, FY);
     } else {
-      const n = 3;
-      const ops = [];
+      // 二层及以上为开敞外廊：木黄灰栏板 + 褐色扶手（截图：走廊对面教学楼）
       const len = exposed1 - exposed0;
-      for (let i = 0; i < n; i++) {
-        const a = exposed0 + .6 + (len - 1.2) * (i / n);
-        const b = exposed0 + .6 + (len - 1.2) * ((i + 1) / n) - .5;
-        ops.push([a, b]);
-      }
-      windowWallX(B, M, { x0: exposed0, x1: exposed1, zc: zS - WT / 2, t: WT, y0: y, ops, sill: 1.0, head: 2.62, inward: -1 });
-      collider(cols, (exposed0 + exposed1) / 2, zS - WT / 2, (exposed1 - exposed0) / 2, WT / 2, y, y + CH, .3);
+      const zr = zS - .07;
+      B.box(M.railWood, len, .85, .1, (exposed0 + exposed1) / 2, y + .425, zr);
+      B.box(M.railHand, len + .04, .1, .2, (exposed0 + exposed1) / 2, y + .93, zr);
+      collider(cols, (exposed0 + exposed1) / 2, zr, len / 2, .1, y, y + 1.02, .12);
     }
     // 南外墙：被南块压住的走廊段（实墙）
     if (corCov1 > corCov0) {
@@ -454,7 +462,7 @@ export function decorateNorthBlock(ctx, g, opts) {
         if (g1 < x1 - .02) solidWallX(B, M, g1, x1, zS - WT / 2, WT, y);
         lintelX(B, M, g0, g1, zS - WT / 2, WT, y, 2.2);
         // 只画门框/门扇，门洞由立面贴图挖洞
-        doorAt(B, M, { dir: 'x', c: zS - WT / 2, along: connX, y, w: 1.4, h: 2.15, inward: -1, leaves: 2 });
+        if (!bare) doorAt(B, M, { dir: 'x', c: zS - WT / 2, along: connX, y, w: 1.4, h: 2.15, inward: -1, leaves: 2 });
         collider(cols, (x0 + g0) / 2, zS - WT / 2, (g0 - x0) / 2, WT / 2, f === 0 ? 0 : y, y + CH, .3);
         collider(cols, (g1 + x1) / 2, zS - WT / 2, (x1 - g1) / 2, WT / 2, f === 0 ? 0 : y, y + CH, .3);
         collider(cols, connX, zS - WT / 2, .7, WT / 2, y + 2.2, y + FH, .3);
@@ -476,8 +484,8 @@ export function decorateNorthBlock(ctx, g, opts) {
       });
     }
 
-    // 教室家具
-    for (let i = 0; i < 3; i++) {
+    // 教室家具（毛坯房不摆放）
+    if (!bare) for (let i = 0; i < 3; i++) {
       const x0 = rb[i] + IT / 2, x1 = rb[i + 1] - IT / 2;
       const xc = (x0 + x1) / 2, zc = (roomZ0 + roomZ1) / 2;
       const xw = bbSide > 0 ? x1 : x0;
@@ -581,14 +589,11 @@ export function decorateNorthBlock(ctx, g, opts) {
     frontHoles.push({ x0: connX - .7, x1: connX + .7, y0: FY + f * FH, y1: FY + f * FH + 2.2 });
   }
   for (let f = 1; f < floors; f++) {
-    const y = FY + f * FH, len = exposed1 - exposed0;
-    for (let i = 0; i < 3; i++) {
-      const a = exposed0 + .6 + (len - 1.2) * (i / 3);
-      const b = exposed0 + .6 + (len - 1.2) * ((i + 1) / 3) - .5;
-      frontHoles.push({ x0: a - .06, x1: b + .06, y0: y + .94, y1: y + 2.68 });
-    }
+    const y = FY + f * FH;
+    // 开敞外廊：整段立面挖通，露出栏板与走廊
+    frontHoles.push({ x0: exposed0, x1: exposed1, y0: y - .02, y1: y + CH + .1 });
   }
-  punchFacade(g, 'front', w, h, fby, frontHoles, false, WALL_FILL);
+  punchFacade(g, 'front', w, h, fby, frontHoles, false, WALL_FILL, 4.0);
 
   // 其他窗贯通：北立面教室窗 + 两端楼梯间窗、两端山墙窗，外立面贴图同位置挖洞
   const backHoles = [];
@@ -602,7 +607,7 @@ export function decorateNorthBlock(ctx, g, opts) {
       backHoles.push({ x0: a + .14, x1: b - .14, y0: y + 1.49, y1: y + 2.96 });
     }
   }
-  punchFacade(g, 'back', w, h, fby, backHoles, true, WALL_FILL);
+  punchFacade(g, 'back', w, h, fby, backHoles, true, WALL_FILL, 4.0);
   const sideWin = [];
   for (let f = 0; f < floors; f++) {
     const y = FY + f * FH;
@@ -615,8 +620,9 @@ export function decorateNorthBlock(ctx, g, opts) {
     sp.right.material = sp.right.material.clone();
     g.userData.rightFacade = sp.right.material;
     g.userData.leftFacade = sp.left.material;
-    punchFacade(g, 'right', d, h, by, connectSide > 0 ? sideWin.concat(doorHole) : sideWin, true, WALL_FILL);
-    punchFacade(g, 'left', d, h, by, connectSide < 0 ? sideWin.concat(doorHole) : sideWin, false, WALL_FILL);
+    // 山墙同样保留贴图画窗（四面做法一致），只把真实窗洞挖透
+    punchFacade(g, 'right', d, h, by, connectSide > 0 ? sideWin.concat(doorHole) : sideWin, true);
+    punchFacade(g, 'left', d, h, by, connectSide < 0 ? sideWin.concat(doorHole) : sideWin, false);
   }
 
   B.flush();
@@ -630,7 +636,7 @@ export function decorateNorthBlock(ctx, g, opts) {
 export function decorateSouthBlock(ctx, g, opts) {
   const {
     by = .8, fby = 0, w = 12, d = 7.5, floors = 4,
-    bbSide = -1, connectX = 0, sharedW = 8,
+    bbSide = -1, connectX = 0, sharedW = 8, bare = false,
   } = opts;
   const M = CM(), B = new Batch(g), cols = [], walks = [];
   const FY = by + .06;
@@ -650,13 +656,13 @@ export function decorateSouthBlock(ctx, g, opts) {
     const fy0 = f === 0 ? 0 : y;            // 首层碰撞自地面起，盖住 0.8m 基座
     walkRect(walks, ix0 - .1, ix1 + .1, iz0 - .1, iz1 + .1, y);
     B.box(M.floor, ix1 - ix0, .16, iz1 - iz0, (ix0 + ix1) / 2, y - .08, (iz0 + iz1) / 2);
-    B.box(M.floorBand, ix1 - ix0 - .2, .012, .3, (ix0 + ix1) / 2, y + .006, iz1 - .6);
+    if (!bare) B.box(M.floorBand, ix1 - ix0 - .2, .012, .3, (ix0 + ix1) / 2, y + .006, iz1 - .6);
     // 南墙：首层主门 + 两侧窗，上层两樘大窗
     if (f === 0) {
-      windowWallX(B, M, { x0: xS, x1: m0, zc: zS - WT / 2, t: WT, y0: y, ops: [[xS + .55, m0 - .55]], sill: 1.0, head: 2.62, inward: -1, curtain: true });
-      windowWallX(B, M, { x0: m1, x1: xN, zc: zS - WT / 2, t: WT, y0: y, ops: [[m1 + .55, xN - .55]], sill: 1.0, head: 2.62, inward: -1, curtain: true });
+      windowWallX(B, M, { x0: xS, x1: m0, zc: zS - WT / 2, t: WT, y0: y, ops: [[xS + .55, m0 - .55]], sill: 1.0, head: 2.62, inward: -1, curtain: !bare });
+      windowWallX(B, M, { x0: m1, x1: xN, zc: zS - WT / 2, t: WT, y0: y, ops: [[m1 + .55, xN - .55]], sill: 1.0, head: 2.62, inward: -1, curtain: !bare });
       lintelX(B, M, m0, m1, zS - WT / 2, WT, y, 2.7);
-      doorAt(B, M, { dir: 'x', c: zS - WT / 2, along: 0, y, w: mainW, h: 2.66, inward: -1, leaves: 2 });
+      if (!bare) doorAt(B, M, { dir: 'x', c: zS - WT / 2, along: 0, y, w: mainW, h: 2.66, inward: -1, leaves: 2 });
       entranceSteps(B, M, walks, 0, zS, FY, 2.6);
       collider(cols, (xS + m0) / 2, zS - WT / 2, (m0 - xS) / 2, WT / 2, 0, y + CH, .45);
       collider(cols, (m1 + xN) / 2, zS - WT / 2, (xN - m1) / 2, WT / 2, 0, y + CH, .45);
@@ -666,7 +672,7 @@ export function decorateSouthBlock(ctx, g, opts) {
     } else {
       windowWallX(B, M, {
         x0: xS, x1: xN, zc: zS - WT / 2, t: WT, y0: y,
-        ops: [[xS + .55, -1.6], [1.6, xN - .55]], sill: 1.0, head: 2.62, inward: -1, curtain: true,
+        ops: [[xS + .55, -1.6], [1.6, xN - .55]], sill: 1.0, head: 2.62, inward: -1, curtain: !bare,
       });
       collider(cols, 0, zS - WT / 2, w / 2, WT / 2, fy0, y + CH, .3);
     }
@@ -676,18 +682,18 @@ export function decorateSouthBlock(ctx, g, opts) {
       if (gx1 < ex0 - .01) solidWallX(B, M, gx1, ex0, zN + WT / 2, WT, y);
       windowWallX(B, M, {
         x0: ex0, x1: xN, zc: zN + WT / 2, t: WT, y0: y,
-        ops: [[ex0 + .45, xN - .45]], sill: 1.0, head: 2.62, inward: 1, curtain: true,
+        ops: [[ex0 + .45, xN - .45]], sill: 1.0, head: 2.62, inward: 1, curtain: !bare,
       });
     } else {
       windowWallX(B, M, {
         x0: xS, x1: ex1, zc: zN + WT / 2, t: WT, y0: y,
-        ops: [[xS + .45, ex1 - .45]], sill: 1.0, head: 2.62, inward: 1, curtain: true,
+        ops: [[xS + .45, ex1 - .45]], sill: 1.0, head: 2.62, inward: 1, curtain: !bare,
       });
       if (ex1 < gx0 - .01) solidWallX(B, M, ex1, gx0, zN + WT / 2, WT, y);
       if (gx1 < xN - .01) solidWallX(B, M, gx1, xN, zN + WT / 2, WT, y);
     }
     lintelX(B, M, gx0, gx1, zN + WT / 2, WT, y, 2.2);
-    doorAt(B, M, { dir: 'x', c: zN + WT / 2, along: connectX, y, w: 1.4, h: 2.15, inward: 1, leaves: 2 });
+    if (!bare) doorAt(B, M, { dir: 'x', c: zN + WT / 2, along: connectX, y, w: 1.4, h: 2.15, inward: 1, leaves: 2 });
     walkRect(walks, connectX - .78, connectX + .78, zN - .45, zN + WT + .3, y);
     collider(cols, (xS + gx0) / 2, zN + WT / 2, (gx0 - xS) / 2, WT / 2, fy0, y + CH, .45);
     collider(cols, (gx1 + xN) / 2, zN + WT / 2, (xN - gx1) / 2, WT / 2, fy0, y + CH, .45);
@@ -699,19 +705,21 @@ export function decorateSouthBlock(ctx, g, opts) {
     // 西侧山墙实墙（黑板墙；此前只做了 1m 墙裙，上半段透空）
     B.box(M.wall, WT, CH, iz1 - iz0, xS + WT / 2, y + CH / 2, (iz0 + iz1) / 2);
     B.box(M.tile, .02, 1.0, iz1 - iz0 - .04, ix0 + .012, y + .5, 0);
-    // 黑板（西墙）+ 家具
-    const zc = 0, xw = ix0;
-    blackboardX(B, M, xw, zc - 2.1, zc + 2.1, y, bbSide);
-    teacherDesk(B, M, { x: xw - bbSide * 1.1, z: zc, y, face: bbSide });
-    for (let r = 0; r < 5; r++) {
-      const dx = xw - bbSide * (2.5 + r * 1.45);
-      for (const oz of [-1.79, -.6, .6, 1.79]) {
-        deskAt(B, M, { x: dx, z: zc + oz, y, face: bbSide });
+    // 黑板（西墙）+ 家具（毛坯房不摆放）
+    if (!bare) {
+      const zc = 0, xw = ix0;
+      blackboardX(B, M, xw, zc - 2.1, zc + 2.1, y, bbSide);
+      teacherDesk(B, M, { x: xw - bbSide * 1.1, z: zc, y, face: bbSide });
+      for (let r = 0; r < 5; r++) {
+        const dx = xw - bbSide * (2.5 + r * 1.45);
+        for (const oz of [-1.79, -.6, .6, 1.79]) {
+          deskAt(B, M, { x: dx, z: zc + oz, y, face: bbSide });
+        }
       }
-    }
-    for (const lx of [-2.6, 2.6]) {
-      pendant(B, M, lx, y + CH - .02, zc, 1.05);
-      fan(B, M, lx * .7, y + CH - .34, zc);
+      for (const lx of [-2.6, 2.6]) {
+        pendant(B, M, lx, y + CH - .02, zc, 1.05);
+        fan(B, M, lx * .7, y + CH - .34, zc);
+      }
     }
     B.box(M.ceil, w - .5, .16, d - .5, 0, y + CH - .08, 0);
   }
@@ -733,7 +741,7 @@ export function decorateSouthBlock(ctx, g, opts) {
       frontHoles.push({ x0: 1.54, x1: xN - .49, y0: y + .94, y1: y + 2.68 });
     }
   }
-  punchFacade(g, 'front', w, h, fby, frontHoles, false, WALL_FILL);
+  punchFacade(g, 'front', w, h, fby, frontHoles, false, WALL_FILL, 4.0);
   const back = [];
   for (let f = 0; f < floors; f++) {
     const y = FY + f * FH;
@@ -741,7 +749,7 @@ export function decorateSouthBlock(ctx, g, opts) {
     if (sign > 0) back.push({ x0: ex0 + .39, x1: xN - .39, y0: y + .94, y1: y + 2.68 });
     else back.push({ x0: xS + .39, x1: ex1 - .39, y0: y + .94, y1: y + 2.68 });
   }
-  punchFacade(g, 'back', w, h, fby, back, true, WALL_FILL);
+  punchFacade(g, 'back', w, h, fby, back, true, WALL_FILL, 4.0);
   const sp = g.userData.sidePlanes;
   if (sp) {
     sp.right.material = sp.right.material.clone();
@@ -751,10 +759,10 @@ export function decorateSouthBlock(ctx, g, opts) {
       const y = FY + f * FH;
       side.push({ x0: -1.96, x1: .96, y0: y + .94, y1: y + 2.68 });
     }
-    punchFacade(g, 'right', d, h, by, side, true, WALL_FILL);
+    punchFacade(g, 'right', d, h, by, side, true);
     // 西山墙实墙（黑板墙）无窗：仅把贴图换成墙色，去掉画出来的窗
     g.userData.leftFacade = sp.left.material;
-    punchFacade(g, 'left', d, h, by, [], false, WALL_FILL);
+    punchFacade(g, 'left', d, h, by, [], false, WALL_FILL, 4.0);
   }
 
   B.flush();

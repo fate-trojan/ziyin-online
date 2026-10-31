@@ -344,6 +344,66 @@ export function makeFacadeTexture({
 } = {}) {
   const c = makeCanvas(w, h), g = c.getContext('2d');
   const rnd = mulberry32(seed * 997 + (night ? 5 : 0));
+  if (style === 'teach' || style === 'teachSide') {
+    // 教学楼立面（BV1hh4y1Q7tB 34–42s）：白墙 + 深褐木窗套 + 约 2m 青砖墙裙 + 灰瓦
+    // teachSide：山墙（两侧）只做纯白墙 + 青砖墙裙，不画任何窗
+    const plain = style === 'teachSide';
+    const topPad = 26;
+    const floorH = (h - topPad - 24) / floors;
+    const bayW = w / bays;
+    const frame = '#6d4233';
+    const cream = '#efe9da';
+    const fullH = floors * 3.45 + 1.2;          // 立面总高（米）
+    const brickPx = Math.round(h * 4.0 / fullH); // 约 4m 墙裙
+    const brickTop = h - brickPx;
+    g.fillStyle = '#f5f1e7'; g.fillRect(0, 0, w, h);
+    noiseOverlay(g, w, h, rnd, .04, 6000, false);
+    // 檐口白带
+    g.fillStyle = '#e8e2d5'; g.fillRect(0, 0, w, topPad);
+    g.fillStyle = 'rgba(0,0,0,.12)'; g.fillRect(0, topPad - 2, w, 2);
+    // 楼层白色腰线
+    for (let f = 0; f <= floors; f++) {
+      const y = topPad + f * floorH;
+      g.fillStyle = '#fbf8ef'; g.fillRect(0, y - 2, w, 4);
+      g.fillStyle = 'rgba(0,0,0,.08)'; g.fillRect(0, y + 2, w, 1);
+    }
+    // 二层及以上：每开间三樘深褐木框窗（山墙留白）
+    if (!plain) for (let f = 0; f < floors - 1; f++) {
+      const wy = topPad + f * floorH + floorH * .26;
+      const wh = floorH * .50;
+      for (let b = 0; b < bays; b++) {
+        const bx = b * bayW;
+        const margin = bayW * .07, gap = bayW * .035;
+        const ww = (bayW - margin * 2 - gap * 2) / 3;
+        for (let k = 0; k < 3; k++) {
+          const x = bx + margin + k * (ww + gap);
+          g.fillStyle = frame; g.fillRect(x - 5, wy - 5, ww + 10, wh + 10);
+          g.fillStyle = cream; g.fillRect(x - 1, wy - 1, ww + 2, wh + 2);
+          const gr = g.createLinearGradient(x, wy, x + ww, wy + wh);
+          gr.addColorStop(0, '#4c5b64'); gr.addColorStop(.55, '#7d949b'); gr.addColorStop(1, '#3f4f58');
+          g.fillStyle = gr; g.fillRect(x, wy, ww, wh);
+          g.strokeStyle = cream; g.lineWidth = 3;
+          g.beginPath(); g.moveTo(x + ww / 2, wy); g.lineTo(x + ww / 2, wy + wh); g.stroke();
+          g.beginPath(); g.moveTo(x, wy + wh / 2); g.lineTo(x + ww, wy + wh / 2); g.stroke();
+        }
+      }
+    }
+    // 青砖墙裙：自地面起约 2m（灰砖错缝 + 白灰勾缝 + 顶部白石压线）
+    const brick = mulberry32(seed * 31 + 7);
+    const bw = 12, bh = 4;
+    g.fillStyle = '#82867f'; g.fillRect(0, brickTop, w, brickPx);
+    for (let row = 0, y = brickTop; y < h; row++, y += bh) {
+      const off = row % 2 ? bw / 2 : 0;
+      for (let x = -bw; x < w + bw; x += bw) {
+        const v = 126 + Math.floor(brick() * 30);
+        g.fillStyle = `rgb(${v},${v + 3},${v - 4})`;
+        g.fillRect(x + off + 1, y + 1, bw - 2, bh - 1);
+      }
+    }
+    g.fillStyle = '#e7e2d6'; g.fillRect(0, brickTop - 4, w, 4);   // 墙裙顶部白石压线
+    g.fillStyle = 'rgba(0,0,0,.16)'; g.fillRect(0, h - 5, w, 5);
+    return { map: canvasTexture(c) };
+  }
   const campus = style === 'campus';
   const base = campus ? '#f2eee5' : style === 'redbrick' ? '#9a5b47' : style === 'grey' ? '#b9b3a4' : '#d8d2c2';
   g.fillStyle = base; g.fillRect(0, 0, w, h);
@@ -453,26 +513,36 @@ export function makeLeafTexture(color = '#ffffff') {
   return canvasTexture(c);
 }
 
-export function makeFacadeEmissive({ w = 512, h = 1024, floors = 4, bays = 8, seed = 1 } = {}) {
+export function makeFacadeEmissive({ w = 512, h = 1024, floors = 4, bays = 8, style = 'redbrick', seed = 1 } = {}) {
   const c = makeCanvas(w, h), g = c.getContext('2d');
   g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
   const rnd = mulberry32(seed * 997 + 5);
+  if (style === 'teachSide') return canvasTexture(c, { srgb: true }); // 山墙无窗，不发光
   const topPad = 26, floorH = (h - topPad - 26) / floors;
   const bayW = w / bays;
+  const lit = (x, y, ww, wh) => {
+    const gr = g.createLinearGradient(x, y, x, y + wh);
+    gr.addColorStop(0, '#ffe8b0'); gr.addColorStop(1, '#f3a94f');
+    g.fillStyle = gr; g.fillRect(x, y, ww, wh);
+    g.fillStyle = 'rgba(255,180,90,0.20)';
+    g.fillRect(x - 10, y - 10, ww + 20, wh + 20);
+    g.strokeStyle = 'rgba(40,20,5,0.9)'; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(x + ww / 2, y); g.lineTo(x + ww / 2, y + wh); g.stroke();
+  };
   for (let f = 0; f < floors; f++) {
     for (let b = 0; b < bays; b++) {
-      const x = b * bayW + bayW * .18;
-      const y = topPad + f * floorH + floorH * .22;
-      const ww = bayW * .64, wh = floorH * .5;
       const isLit = rnd() < 0.55;
       if (!isLit) continue;
-      const gr = g.createLinearGradient(x, y, x, y + wh);
-      gr.addColorStop(0, '#ffe8b0'); gr.addColorStop(1, '#f3a94f');
-      g.fillStyle = gr; g.fillRect(x, y, ww, wh);
-      g.fillStyle = 'rgba(255,180,90,0.20)';
-      g.fillRect(x - 10, y - 10, ww + 20, wh + 20);
-      g.strokeStyle = 'rgba(40,20,5,0.9)'; g.lineWidth = 3;
-      g.beginPath(); g.moveTo(x + ww / 2, y); g.lineTo(x + ww / 2, y + wh); g.stroke();
+      if (style === 'teach') {
+        const margin = bayW * .07, gap = bayW * .035;
+        const ww = (bayW - margin * 2 - gap * 2) / 3;
+        const wy = topPad + f * floorH + floorH * .26, wh = floorH * .50;
+        for (let k = 0; k < 3; k++) lit(b * bayW + margin + k * (ww + gap), wy, ww, wh);
+      } else {
+        const x = b * bayW + bayW * .18;
+        const y = topPad + f * floorH + floorH * .22;
+        lit(x, y, bayW * .64, floorH * .5);
+      }
     }
   }
   return canvasTexture(c, { srgb: true });

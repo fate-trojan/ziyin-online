@@ -66,6 +66,7 @@ button, input, select { font-family: inherit; }
   color: rgba(239,233,220,.72); font-size: 14px; cursor: pointer; backdrop-filter: blur(12px); transition: .2s;
 }
 .icon-btn:hover { color: #fff; border-color: var(--gold-soft); }
+.icon-btn.on { color: var(--gold); border-color: var(--gold-soft); }
 .daynight { display: flex; padding: 4px; border-radius: 999px; border: 1px solid rgba(239,233,220,.18); background: rgba(22,27,29,.5); backdrop-filter: blur(14px); }
 .daynight button {
   border: 0; background: transparent; color: rgba(239,233,220,.55); padding: 7px 14px; border-radius: 999px; cursor: pointer;

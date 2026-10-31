@@ -433,8 +433,6 @@ export function buildDachengHall(ctx) {
   const plinth = addStonePlinth(g, mats.stone, platW, platD, platH, 0, 0);
   // steps south
   addSteps(g, mats.stone, 0, platD / 2 + 0.2, 11, platH, 5.5, 6);
-  // side steps? small
-  addSteps(g, mats.stone, -platW / 2 - .1, 0, 2.2, platH, 2.2, 4);
   // 台基不设围栏：可从正面台阶走上，也可直接跳上台基
 
   const bodyW = 30, bodyD = 20;
@@ -539,9 +537,9 @@ export function buildDachengHall(ctx) {
 
 // ------------------------------------------------------------------
 export function buildPanPond(ctx) {
-  const { group, mats } = ctx;
+  const { group, mats, fences } = ctx;
   const g = new THREE.Group();
-  // 依 14.51.02 俯视：半月形（北直弦、南弧），三条南北向石板步道将水面分为四格
+  // 依 14.51.02 俯视：半月形（北直弦、南弧），三座同型单拱石桥跨水
   const W2 = 15, DEP = 8.5;
   const R = (W2 * W2 + DEP * DEP) / (2 * DEP);
   const CY = R - DEP / 2;
@@ -598,9 +596,9 @@ export function buildPanPond(ctx) {
     const apron = new THREE.Mesh(geo, mats.path);
     apron.position.y = .06; apron.receiveShadow = true; g.add(apron);
   }
-  // 四格水面
-  const spans = [[-W2, -8.15], [-6.9, -0.78], [0.78, 6.9], [8.15, W2]];
-  for (const [x0, x1] of spans) {
+  // 整片水面：三条南北向石板步道全部改为同型单拱石桥，水面在桥下连成一片
+  const span = [[-W2, W2]];
+  for (const [x0, x1] of span) {
     const s = new THREE.Shape();
     s.moveTo(x0, DEP / 2);
     s.lineTo(x1, DEP / 2);
@@ -614,38 +612,294 @@ export function buildPanPond(ctx) {
     const w = new THREE.Mesh(geo, water);
     w.position.y = .17; w.receiveShadow = true; g.add(w);
   }
-  // 三条石板步道（中轴一条略宽），北接弦边、南端伸入岸
-  for (const [x, wdt] of [[0, 1.5], [-7.55, 1.25], [7.55, 1.25]]) {
-    meshBox(g, mats.slab, wdt, .26, DEP + 2.4, x, .16, .25);
-  }
-  // 步道矮望柱与池岸石柱（实景为短方柱，无连续栏板）
-  const posts = [];
-  for (const [x, wdt] of [[0, 1.5], [-7.55, 1.25], [7.55, 1.25]]) {
-    for (let z = -3.6; z <= 4.6; z += 2.05) {
-      for (const s of [-1, 1]) posts.push(tbox(.24, .46, .24, x + s * (wdt / 2 - .1), .5, z, 0));
+  // 三座同型单拱石桥（视频 BV1Dx411v7jb t=180–239s）：长 9.6m、宽 2.3m、拱高 1.05m
+  const POND_BRIDGES = [-7.55, 0, 7.55];
+  for (const cx of POND_BRIDGES) {
+    const bridge = makeArchBridge(mats, 2.3, 9.6, 1.05, { abutH: .3, archH: .8 });
+    bridge.position.x = cx;
+    g.add(bridge);
+    // 桥头踏步落地（桥面端 .32m，地面 0）
+    for (const s of [-1, 1]) {
+      const st = new THREE.Mesh(new THREE.BoxGeometry(2.7, .16, .5), mats.slab);
+      st.position.set(cx, .08, s * 5.05);
+      st.castShadow = true; st.receiveShadow = true; g.add(st);
     }
   }
-  for (let x = -14; x <= 14; x += 3.4) {
-    posts.push(tbox(.26, .42, .26, x, .44, -arcY(x) + .45, 0));
+  // 池岸连续石栏杆（弧形南岸 + 北直弦），在三条步道/桥头留缺口
+  const railGeos = [];
+  const addRail = (x0, z0, x1, z1) => {
+    const dx = x1 - x0, dz = z1 - z0, len = Math.hypot(dx, dz);
+    const rot = Math.atan2(dx, dz), mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+    railGeos.push(tbox(.16, 1.02, .16, x0, .61, z0, 0));
+    railGeos.push(tbox(.16, 1.02, .16, x1, .61, z1, 0));
+    railGeos.push(tbox(.2, .1, len, mx, .22, mz, rot));
+    railGeos.push(tbox(.12, .7, len, mx, .61, mz, rot));
+    railGeos.push(tbox(.22, .12, len + .12, mx, 1.0, mz, rot));
+    railGeos.push(tbox(.38, .1, len, mx, .14, mz, rot));
+    fences.push([[-28 + x0, 90 + z0], [-28 + x1, 90 + z1], 1.12]);
+  };
+  const gapAt = (x) => POND_BRIDGES.some((cx) => Math.abs(x - cx) < 1.55);
+  // 弧形南岸：沿水岸外法线退 0.45m
+  const arcPts = [];
+  const N = 26;
+  for (let i = 0; i <= N; i++) {
+    const x = -W2 + 2 * W2 * i / N;
+    const zw = -arcY(x);
+    const k = .45 / R;
+    arcPts.push([x + x * k, zw + (zw + CY) * k]);
   }
-  const postMesh = new THREE.Mesh(mergeGeometriesSafe(posts), mats.marble);
-  postMesh.castShadow = true; g.add(postMesh);
-  // 北弦边绿篱
-  meshBox(g, mats.grassDark, 28.4, .62, .8, 0, .34, -5.0);
-  // 旗杆：按 README 中轴序列「校门→旗杆/励志石→泮池」，位于泮池南侧、校门与泮池之间
+  for (let i = 0; i < N; i++) {
+    const [x0, z0] = arcPts[i], [x1, z1] = arcPts[i + 1];
+    if (gapAt((x0 + x1) / 2)) continue;
+    addRail(x0, z0, x1, z1);
+  }
+  // 北直弦：位于水岸外 0.37m
+  let chordPrev = null;
+  for (let x = -14.8; x <= 14.8 + 1e-6; x += 1.48) {
+    if (gapAt(x)) { chordPrev = null; continue; }
+    if (chordPrev !== null) addRail(chordPrev, -4.62, x, -4.62);
+    chordPrev = x;
+  }
+  addMerged(g, railGeos, mats.marble);
+  // 桥侧栏杆碰撞线（防止从桥面侧向落水）
+  for (const cx of POND_BRIDGES) {
+    fences.push([[-28 + cx - 1.18, 84.7], [-28 + cx - 1.18, 95.3], 2.3]);
+    fences.push([[-28 + cx + 1.18, 84.7], [-28 + cx + 1.18, 95.3], 2.3]);
+  }
+  // 北弦边绿篱（三处桥头留缺口，避免绿篱穿过桥头踏步）
+  const hedgeSegs = [[-14.2, -9.1], [-6.0, -1.55], [1.55, 6.0], [9.1, 14.2]];
+  for (const [a, b] of hedgeSegs) meshBox(g, mats.grassDark, b - a, .62, .8, (a + b) / 2, .34, -5.0);
+  // 旗杆：按实景航拍，位于泮池南草坪中段（石环外缘以南约 2m），不再落在中轴铺装上
   {
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(.1, .16, 15, 8), mats.whiteLine);
-    pole.position.set(0, 7.8, 10.2); pole.castShadow = true; g.add(pole);
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.4, .35, 16), mats.marble);
-    base.position.set(0, .18, 10.2); base.receiveShadow = true; g.add(base);
-    const lawn = new THREE.Mesh(new THREE.PlaneGeometry(20, 5.6), mats.grass);
-    lawn.rotation.x = -Math.PI / 2; lawn.position.set(0, .04, 10.0); lawn.receiveShadow = true; g.add(lawn);
+    pole.position.set(0, 7.8, 7.8); pole.castShadow = true; g.add(pole);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.2, .35, 16), mats.marble);
+    base.position.set(0, .18, 7.8); base.receiveShadow = true; g.add(base);
+    const lawn = new THREE.Mesh(new THREE.PlaneGeometry(20, 5.4), mats.grass);
+    lawn.rotation.x = -Math.PI / 2; lawn.position.set(0, .04, 8.5); lawn.receiveShadow = true; g.add(lawn);
     const flagGeo = new THREE.PlaneGeometry(4.0, 2.6, 12, 4);
-    const flag = new THREE.Mesh(flagGeo, new THREE.MeshStandardMaterial({ color: 0xc23a2e, side: THREE.DoubleSide, roughness: .8 }));
-    flag.position.set(2.0, 13.3, 10.2); g.add(flag);
+    const flag = new THREE.Mesh(flagGeo, new THREE.MeshStandardMaterial({ map: nationalFlagTexture(), side: THREE.DoubleSide, roughness: .8, emissive: 0x4a0c08, emissiveIntensity: .55 }));
+    flag.position.set(2.0, 13.3, 7.8); g.add(flag);
     ctx.flag = flag; ctx.flagGeo = flagGeo;
   }
   g.position.set(-28, 0, 90);
+  group.add(g);
+  return g;
+}
+
+/** 自习室东南石桥水池的轮廓参数：地表开洞（context.js）与此处建池共用，保证洞与水面贴合 */
+export const STUDY_POND = { x: -60.0, z: 3.0, rx: 6.1, rz: 10.2 };
+export const studyPondWob = (a) => 1 + .05 * Math.sin(a * 3 + .8) + .03 * Math.sin(a * 5 + 2.1);
+/** 池边轮廓点列：k 为相对半轴的倍率（1.0≈水面边缘，1.23≈压顶外缘） */
+export function studyPondOutline(k = 1, n = 64) {
+  const P = STUDY_POND, o = [];
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2;
+    o.push([P.x + Math.cos(a) * P.rx * k * studyPondWob(a), P.z + Math.sin(a) * P.rz * k * studyPondWob(a)]);
+  }
+  return o;
+}
+
+/**
+ * 自习室东南 · 石桥水池（对照实景照片）
+ * 绿水池 + 石砌驳岸与压顶 + 西岸假山石 + 菱形镂空石栏平板石桥 + 岸边石灯笼。
+ * 池心 (−55, 3)，椭圆半轴 6.1×10.2；桥沿东西向、桥面顶 .34（自地面一步上桥）。
+ */
+export function buildStudyPond(ctx) {
+  const { group, mats } = ctx;
+  const g = new THREE.Group();
+  const P = STUDY_POND;
+  const wob = studyPondWob;
+  const at = (a, k) => [P.x + Math.cos(a) * P.rx * k * wob(a), P.z + Math.sin(a) * P.rz * k * wob(a)];
+  const ringPts = (k, n = 64) => {
+    const o = [];
+    for (let i = 0; i < n; i++) o.push(at(i / n * Math.PI * 2, k));
+    return o;
+  };
+  const shapeOf = (pts) => {
+    const s = new THREE.Shape();
+    pts.forEach(([x, z], i) => (i ? s.lineTo(x, -z) : s.moveTo(x, -z)));
+    s.closePath();
+    return s;
+  };
+  const ringShape = (kOut, kIn) => {
+    const s = shapeOf(ringPts(kOut));
+    const h = new THREE.Path();
+    ringPts(kIn).forEach(([x, z], i) => (i ? h.lineTo(x, -z) : h.moveTo(x, -z)));
+    h.closePath(); s.holes.push(h);
+    return s;
+  };
+  const flat = (pts, mat, y, seg = 4) => {
+    const geo = new THREE.ShapeGeometry(shapeOf(pts), seg);
+    geo.rotateX(-Math.PI / 2);
+    const m = new THREE.Mesh(geo, mat);
+    m.position.y = y; m.receiveShadow = true; g.add(m);
+    return m;
+  };
+  // 水面（照片为浑绿）−0.5；池底 −1.16
+  const waterMat = new THREE.MeshPhysicalMaterial({ color: 0x2f4a3a, roughness: .08, metalness: .34, transparent: true, opacity: .94 });
+  waterMat.normalMap = mats.waterNormal; waterMat.normalScale = new THREE.Vector2(.22, .22);
+  flat(ringPts(.99), waterMat, -.5, 48);
+  flat(ringPts(1.02), mats.soil, -1.16, 48);
+  // 石砌驳岸（−1.16→.06）与压顶（0→.11）
+  const bankGeo = new THREE.ExtrudeGeometry(ringShape(1.15, .96), { depth: 1.22, bevelEnabled: false });
+  bankGeo.rotateX(-Math.PI / 2);
+  const bank = new THREE.Mesh(bankGeo, mats.stone);
+  bank.position.y = -1.16; bank.castShadow = true; bank.receiveShadow = true; g.add(bank);
+  const copeGeo = new THREE.ExtrudeGeometry(ringShape(1.23, .95), { depth: .11, bevelEnabled: false });
+  copeGeo.rotateX(-Math.PI / 2);
+  const cope = new THREE.Mesh(copeGeo, mats.stoneDark);
+  cope.castShadow = true; cope.receiveShadow = true; g.add(cope);
+  // 假山石：西、北岸为主（照片左岸堆石），东岸桥头补一组
+  const rnd = mulberry32(4513);
+  const rockGeos = [];
+  const rockSpots = [];
+  for (let i = 0; i < 22; i++) {
+    const a = (128 + i * 9.4) * Math.PI / 180;          // 128°→326°：西岸绕到北岸
+    const k = 1.06 + rnd() * .16;
+    const [x, z] = at(a, k);
+    const s = .5 + rnd() * .75;
+    const geo = new THREE.DodecahedronGeometry(.95 * s, 0);
+    geo.scale(1, .8 + rnd() * .5, .82 + rnd() * .3);
+    geo.rotateY(rnd() * Math.PI * 2);
+    geo.translate(x, .06 + .3 * s, z);
+    rockGeos.push(geo);
+    if (s > .85) rockSpots.push({ x, z, hx: .55 * s, hz: .55 * s });
+  }
+  for (const [x, z, s] of [[P.x + 6.6, -5.6, 1.15], [P.x + 5.8, 10.2, .9]]) {
+    const geo = new THREE.DodecahedronGeometry(.95 * s, 0);
+    geo.scale(1, .8, .85); geo.rotateY(.7); geo.translate(x, .06 + .3 * s, z);
+    rockGeos.push(geo);
+    rockSpots.push({ x, z, hx: .55 * s, hz: .55 * s });
+  }
+  const rocks = new THREE.Mesh(mergeGeometriesSafe(rockGeos), mats.rock);
+  rocks.castShadow = true; rocks.receiveShadow = true; g.add(rocks);
+  // 石灯笼（照片对岸石雕）：基座、柱身、灯室、四角攒尖顶、宝顶
+  const lx = P.x - 8.0, lz = -3.6;
+  {
+    const L = new THREE.Group(); L.position.set(lx, 0, lz);
+    const add = (geo, y, ry = 0) => {
+      const m = new THREE.Mesh(geo, mats.stone);
+      m.position.y = y; m.rotation.y = ry; m.castShadow = true; m.receiveShadow = true; L.add(m);
+      return m;
+    };
+    add(new THREE.BoxGeometry(.74, .18, .74), .09);
+    add(new THREE.CylinderGeometry(.15, .21, .9, 8), .63);
+    add(new THREE.BoxGeometry(.5, .46, .5), 1.31);
+    // 灯室四面开窗（暖光面色块，夜里由 campus 统一点亮）
+    const glowMat = new THREE.MeshStandardMaterial({ color: 0x2b2620, emissive: 0xffcf8e, emissiveIntensity: 0, roughness: .8 });
+    for (const [dx, dz, ry] of [[0, .26, 0], [0, -.26, 0], [.26, 0, Math.PI / 2], [-.26, 0, Math.PI / 2]]) {
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(.28, .3), glowMat);
+      w.position.set(dx, 1.31, dz); w.rotation.y = ry; L.add(w);
+    }
+    add(new THREE.ConeGeometry(.52, .34, 4), 1.71, Math.PI / 4);
+    add(new THREE.SphereGeometry(.12, 8, 6), 1.95);
+    L.userData.glowMat = glowMat;
+    g.add(L);
+    ctx.studyLanternGlow = glowMat;
+  }
+  // 折桥（平面呈“2”字）：北段东西向 → 斜段向东南折 → 南段东西向，三段折线跨池
+  const BR = { wid: 2.3, top: .34 };
+  const RUNS = [
+    { a: [P.x - 5.6, -3.6], b: [P.x - .6, -3.6] },   // 北段：西岸 → 池中
+    { a: [P.x - .6, -3.6], b: [P.x + 3.4, 3.6] },    // 斜段：向东南折
+    { a: [P.x + 3.4, 3.6], b: [P.x + 7.4, 3.6] },    // 南段：池中 → 东岸
+  ];
+  const railY = BR.top + .16;          // 栏板底
+  const railW = BR.wid / 2 - .16;      // 栏板中心线距桥中线
+  const panelGeo = (len) => {
+    const s = new THREE.Shape();
+    s.moveTo(-len / 2, 0); s.lineTo(len / 2, 0); s.lineTo(len / 2, .6); s.lineTo(-len / 2, .6); s.closePath();
+    for (const cx of [-len / 4, len / 4]) {
+      const hw = Math.min(.26, len / 5), hh = .19;
+      const h = new THREE.Path();
+      h.moveTo(cx, .3 - hh); h.lineTo(cx + hw, .3); h.lineTo(cx, .3 + hh); h.lineTo(cx - hw, .3); h.closePath();
+      s.holes.push(h);
+    }
+    return new THREE.ExtrudeGeometry(s, { depth: .12, bevelEnabled: false });
+  };
+  const runSurfaces = [];
+  RUNS.forEach(({ a, b }, ri) => {
+    const dx = b[0] - a[0], dz = b[1] - a[1];
+    const len = Math.hypot(dx, dz);
+    const ry = Math.atan2(dx, dz);      // 局部 +z = 沿桥段方向
+    const rg = new THREE.Group();
+    rg.position.set(a[0], 0, a[1]);
+    rg.rotation.y = ry;
+    g.add(rg);
+    // 桥面板
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(BR.wid, .2, len), mats.slab);
+    deck.position.set(0, BR.top - .1, len / 2);
+    deck.castShadow = true; deck.receiveShadow = true; rg.add(deck);
+    // 桥墩与墩帽（自池底顶到桥面），折桥首尾落岸处再加桥台（台面与桥面齐平 .34）
+    const pierGeos = [];
+    for (const t of [.25, .5, .75]) {
+      pierGeos.push(tbox(.56, 1.3, .56, 0, -.51, len * t, 0));
+      pierGeos.push(tbox(.74, .1, .74, 0, -.02, len * t, 0));
+    }
+    if (ri === 0 || ri === RUNS.length - 1) {
+      const zz = ri === 0 ? .45 : len - .45;
+      pierGeos.push(tbox(BR.wid + .3, .5, .9, 0, .09, zz, 0));
+    }
+    const piers = new THREE.Mesh(mergeGeometriesSafe(pierGeos), mats.stone);
+    piers.castShadow = true; piers.receiveShadow = true; rg.add(piers);
+    // 望柱 + 菱形镂空栏板 + 扶手（逐段沿折线布置）
+    const nSeg = Math.max(2, Math.round(len / 2.3));
+    const segL = len / nSeg;
+    const panelGeos = [], postGeos = [];
+    for (let i = 0; i < nSeg; i++) {
+      const zc = segL * (i + .5);
+      for (const s of [-1, 1]) {
+        const geo = panelGeo(segL - .3);
+        geo.rotateY(Math.PI / 2);
+        geo.translate(s * railW, railY, zc);
+        panelGeos.push(geo);
+        panelGeos.push(tbox(.18, .09, segL - .1, s * railW, railY + .65, zc, 0));
+      }
+    }
+    for (let i = 0; i <= nSeg; i++) {
+      const zc = segL * i;
+      for (const s of [-1, 1]) {
+        postGeos.push(tbox(.22, 1.0, .22, s * railW, BR.top + .5, zc, 0));
+        postGeos.push(tbox(.32, .1, .32, s * railW, BR.top + 1.02, zc, 0));
+      }
+    }
+    const panels = new THREE.Mesh(mergeGeometriesSafe(panelGeos), mats.stone);
+    panels.castShadow = true; panels.receiveShadow = true; rg.add(panels);
+    const posts = new THREE.Mesh(mergeGeometriesSafe(postGeos), mats.stone);
+    posts.castShadow = true; posts.receiveShadow = true; rg.add(posts);
+    // 桥面可走面：旋转矩形，长度沿局部 z；段间在折点相接
+    runSurfaces.push({
+      cx: (a[0] + b[0]) / 2, cz: (a[1] + b[1]) / 2, ry,
+      hx: BR.wid / 2, hz: len / 2 + .06, y: BR.top,
+    });
+    // 石栏实体：两侧栏板按折线段登记栅栏，桥面高度同样不可穿（抬到跳跃也越不过）
+    const nx = Math.cos(ry), nz = -Math.sin(ry);   // 局部 +x 方向（横向）
+    for (const s of [-1, 1]) {
+      const o = s * railW;
+      ctx.fences.push([
+        a[0] + nx * o, a[1] + nz * o,
+        b[0] + nx * o, b[1] + nz * o,
+        BR.top + 1.5,
+      ]);
+    }
+  });
+  // 水面分带碰撞（k≤.95 内缘，驳岸压顶盖住 0.95~1.23，岸边可走）；y1=.1 让桥面（.34）不受阻挡
+  const waterCols = [];
+  for (let z = P.z - P.rz * .95; z <= P.z + P.rz * .95 + 1e-3; z += 1.0) {
+    const dz = (z - P.z) / P.rz;
+    if (Math.abs(dz) >= .949) continue;
+    const hx = P.rx * .95 * Math.sqrt(1 - dz * dz);
+    if (hx < .35) continue;
+    waterCols.push({ x: P.x, z, hx, hz: .56, y1: .1 });
+  }
+  g.userData.colliders = [
+    ...waterCols,
+    ...rockSpots.map((r) => ({ x: r.x, z: r.z, hx: r.hx, hz: r.hz })),
+    { x: lx, z: lz, hx: .42, hz: .42 },
+  ];
+  g.userData.walkSurfaces = runSurfaces;
+  g.userData.bridge = { runs: RUNS, wid: BR.wid, top: BR.top };
   group.add(g);
   return g;
 }
@@ -1735,9 +1989,38 @@ export function buildZhufeng(ctx) {
   // 东墙留出院门（z 17.5~21.5）
   addWall(g, mats, CX, ZN, CX, 17.5, { h: WH });
   addWall(g, mats, CX, 21.5, CX, ZS, { h: WH });
-  // 出院门上方墙带与过梁
-  meshBox(g, mats.plaster, .42, WH - 3.8, 4.0, CX, 3.8 + (WH - 3.8) / 2, 19.5);
-  meshBox(g, mats.stoneDark, .7, .22, 4.4, CX, 3.72, 19.5);
+  // 出院门：月洞门（视频 194s：圆形门洞 + 粉色门套）
+  {
+    const R = 1.96;
+    const shape = new THREE.Shape();
+    shape.moveTo(-2.0, 0);
+    shape.lineTo(2.0, 0);
+    shape.lineTo(2.0, WH);
+    shape.lineTo(-2.0, WH);
+    shape.closePath();
+    const hole = new THREE.Path();
+    hole.absarc(0, R, R, 0, Math.PI * 2, false);
+    shape.holes.push(hole);
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: .42, bevelEnabled: false, curveSegments: 24 });
+    const panel = new THREE.Mesh(geo, mats.plaster);
+    panel.rotation.y = -Math.PI / 2;
+    panel.position.set(CX + .21, 0, 19.5);
+    panel.castShadow = panel.receiveShadow = true;
+    g.add(panel);
+    // 粉色门套：内外两面各一圈
+    for (const s of [-1, 1]) {
+      const ring = new THREE.Mesh(new THREE.RingGeometry(R - .03, R + .24, 40), mats.peach);
+      ring.rotation.y = s * Math.PI / 2;
+      ring.position.set(CX + s * .225, R, 19.5);
+      g.add(ring);
+    }
+    // 墙顶灰瓦压顶
+    for (const s of [-1, 1]) {
+      const cap = addBox(g, mats.roof, .62, .14, 4.0, CX, WH + .08, 19.5);
+      cap.rotation.z = s * .07;
+    }
+    addBox(g, mats.ridge, .16, .12, 4.0, CX, WH + .16, 19.5);
+  }
   // plinth
   addStonePlinth(g, mats.stone, W + 2.5, D + 2.5, .8, 0, 0);
   // lower white base
@@ -1810,7 +2093,7 @@ export function buildZhufeng(ctx) {
   }
   // 院内碑刻与党旗浮雕
   addStele(g, mats, -10.5, 18, { w: 1.9, h: 3.2, d: .45, textMat: mats.plaques.zhufengGuju, ry: .08 });
-  addStele(g, mats, 9.5, 19.6, { w: 1.4, h: 2.4, d: .4, textMat: mats.plaques.wenbao, ry: .4 });
+  addStele(g, mats, 9.5, 22.6, { w: 1.4, h: 2.4, d: .4, textMat: mats.plaques.wenbao, ry: .4 });
   addStele(g, mats, -9.5, -6.5, { w: 1.6, h: 2.4, d: .4, textMat: mats.plaques.yinglie });
   meshBox(g, mats.redBeam, .12, 2.2, 3.4, -13.72, 2.6, 4.0);
   const emblem = new THREE.Mesh(new THREE.CircleGeometry(.32, 16), mats.gold);
@@ -1818,16 +2101,7 @@ export function buildZhufeng(ctx) {
   // 院外墙面公告板（出院门南侧）
   addPlaque(g, mats, mats.plaques.notice, CX + .24, 2.7, 7.6, { w: 2.0, h: 2.8, ry: Math.PI / 2 });
   addPlaque(g, mats, mats.plaques.noticeRed, CX + .24, 1.0, 7.6, { w: 2.4, h: .6, ry: Math.PI / 2 });
-  // 出院门：铁门扇（向外开启，贴墙柱）+ 4 个红灯笼
-  for (const s of [-1, 1]) {
-    const leaf = new THREE.Mesh(new THREE.BoxGeometry(1.7, 3.2, .08), mats.black);
-    leaf.position.set(CX + .9, 1.6, 19.5 + s * 1.95);
-    leaf.castShadow = true; g.add(leaf);
-  }
-  for (const dz of [-1.35, -.45, .45, 1.35]) {
-    const gl = addLantern(g, mats, CX + .32, 3.25, 19.5 + dz, { scale: .55, glowTex: mats.glowTex });
-    nightEmitters.push(gl.children[0]);
-  }
+  // 出院门为开放式月洞门，不设门扇与灯笼
   // 石桌石凳与竹丛
   meshBox(g, mats.stoneDark, 1.0, 1.3, 1.0, 8, .65, 16.5);
   const tt = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.15, .18, 14), mats.stone);
@@ -2079,8 +2353,26 @@ export function buildFudeWestCourt(ctx, opts = {}) {
   const { group, mats } = ctx;
   const { x = 70.4, z = -69.1 } = opts;
   const g = new THREE.Group();
-  // 南北向白墙（与富的廊西端、宿舍西墙连成一线）
-  addWall(g, mats, 0, -7.5, 0, 7.5, { h: 2.7, t: .3 });
+  // 南北向白墙（与富的廊西端、宿舍西墙连成一线）；中段留普通院门门洞（无匾额，用户指正：与富的廊门是两个门）
+  addWall(g, mats, 0, -7.5, 0, -0.9, { h: 2.7, t: .3 });
+  addWall(g, mats, 0, 1.1, 0, 7.5, { h: 2.7, t: .3 });
+  meshBox(g, mats.woodDark, .34, 2.5, .16, 0, 1.25, -.98);
+  meshBox(g, mats.woodDark, .34, 2.5, .16, 0, 1.25, 1.18);
+  meshBox(g, mats.woodDark, .34, .16, 2.3, 0, 2.5, .1);
+  // 富的廊门楼（BV1wA4m157LX 15–16s）：独立于白墙，位于廊道西口台阶前、面向西，额「富的廊」，双狮夹门
+  const gate = new THREE.Group();
+  gate.position.set(-.1, 0, 9.1);
+  for (const s of [-1, 1]) meshBox(gate, mats.plaster, .7, 3.0, .9, 0, 1.5, s * 1.3);
+  meshBox(gate, mats.plaster, .7, .62, 2.6, 0, 2.71, 0);   // 门楣白墙
+  meshBox(gate, mats.stoneDark, 1.0, .12, 1.6, 0, .06, 0); // 门槛石
+  for (const s of [-1, 1]) meshBox(gate, mats.woodDark, .16, 2.4, .14, 0, 1.2, s * .79);
+  meshBox(gate, mats.woodDark, .16, .16, 1.72, 0, 2.34, 0);
+  const gateRoof = xieshanRoofGroup({ W: 4.0, D: 2.4, H: .95, skirtH: .42, gableWidth: 3.6, tileMat: mats.roofDark, ridgeMat: mats.ridge, gableMat: mats.plaster, fasciaMat: mats.roofDark, cornerLift: .18 });
+  gateRoof.rotation.y = Math.PI / 2;
+  gateRoof.position.y = 3.02;
+  gate.add(gateRoof);
+  addPlaque(gate, mats, mats.plaques.fude, -.38, 2.66, 0, { w: 1.5, h: .4, ry: -Math.PI / 2 });
+  g.add(gate);
   // 文保牌 + 两扇大花窗（朝东，面向院落）
   addPlaque(g, mats, mats.plaques.wenbao, .17, 1.85, .3, { w: .62, h: .92, ry: Math.PI / 2 });
   for (const wz of [-3.6, 4.2]) addLatticeWall(g, mats, 1.6, 1.15, .16, 1.75, wz, { ry: Math.PI / 2 });
@@ -2116,9 +2408,9 @@ export function buildFudeWestCourt(ctx, opts = {}) {
       pad.position.set(tx + dx * sc, dy * sc, tz + dz * sc); pad.scale.y = .42; pad.castShadow = true; g.add(pad);
     }
   }
-  // 石狮一对：置于墙前，夹护富的廊西端上廊石阶
-  buildStoneLion(g, mats, .62, 5.4, Math.PI / 2);
-  buildStoneLion(g, mats, .62, 6.6, Math.PI / 2);
+  // 石狮一对：置于富的廊门楼外，夹护门洞（视频 15–16s 双狮守门，面朝西）
+  buildStoneLion(g, mats, -1.0, 7.7, -Math.PI / 2);
+  buildStoneLion(g, mats, -1.0, 10.5, -Math.PI / 2);
   g.position.set(x, 0, z);
   group.add(g);
   return g;
@@ -2387,18 +2679,38 @@ export function buildRedCorridor(ctx, opts = {}) {
 // ------------------------------------------------------------------
 function cloneFacadeMats(mats, key, w, d, h) {
   const base = mats.facades[key];
-  const mk = (width) => {
-    const map = base.map.clone(); map.needsUpdate = true; map.wrapS = THREE.RepeatWrapping;
-    map.repeat.set(Math.max(1, width / 26), 1);
-    const em = base.emissiveMap.clone(); em.needsUpdate = true; em.wrapS = THREE.RepeatWrapping;
+  // 教学楼山墙（两侧）：纯白墙 + 青砖墙裙，不沿用正立面的画窗贴图
+  const sideSrc = key === 'teachMain' && mats.facades.teachSide ? mats.facades.teachSide : base;
+  const mk = (src, width) => {
+    const map = src.map.clone(); map.needsUpdate = true; map.wrapS = THREE.RepeatWrapping;
+    // 教学楼：窄面（南块 12m、山墙 7.5m）也按开间实际宽度取贴图比例，避免窗被压扁
+    const rx = key === 'teachMain' ? Math.max(.2, width / 26) : Math.max(1, width / 26);
+    map.repeat.set(rx, 1);
+    const em = src.emissiveMap.clone(); em.needsUpdate = true; em.wrapS = THREE.RepeatWrapping;
     em.repeat.set(map.repeat.x, 1);
-    const mat = base.clone();
+    const mat = src.clone();
     mat.map = map; mat.emissiveMap = em;
     mat.emissiveIntensity = 0;
     mat.userData.baseEmissive = 1.25;
     return mat;
   };
-  return { front: mk(w), side: mk(d), h };
+  return { front: mk(base, w), side: mk(sideSrc, d), h };
+}
+
+/** 在已按面宽复制的立面材质上再切一片：w/h 为切片尺寸，ox/oy 为相对整面左下角的偏移 */
+function sliceFacadeMat(base, w, h, ox, oy, fullH) {
+  const mat = base.clone();
+  mat.map = base.map.clone();
+  mat.map.needsUpdate = true;
+  mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping;
+  mat.map.repeat.set(w / 26, h / fullH);
+  mat.map.offset.set(ox / 26, oy / fullH);
+  mat.emissiveMap = base.emissiveMap.clone();
+  mat.emissiveMap.needsUpdate = true;
+  mat.emissiveMap.wrapS = mat.emissiveMap.wrapT = THREE.RepeatWrapping;
+  mat.emissiveMap.repeat.copy(mat.map.repeat);
+  mat.emissiveMap.offset.copy(mat.map.offset);
+  return mat;
 }
 
 // ------------------------------------------------------------------
@@ -2590,7 +2902,9 @@ export function buildModernBlock(ctx, {
   corridor = false, baseH = 0, railMat = null, flatRoof = false, entrance = true, roofBulk = true,
   porch = false, openInterior = false, corridorGaps = null,
   closedCorridorEnds = false, // 外廊东西端封实墙（与南侧副楼连成一体，外墙不再开缺口）
-  openGround = null   // 首层前脸敞开（靠花池一侧）：{ x0, x1 } 局部 x 范围；仅 baseH=0 用
+  openGround = null,  // 首层前脸敞开（靠花池一侧）：{ x0, x1 } 局部 x 范围；仅 baseH=0 用
+  noFrontBand = false // 前脸为开敞外廊时不加腰线，避免白色横带穿过栏板
+  , noBase = false    // 教学楼：墙裙贴图直达地面，不再套 0.8m 石基座
 } = {}) {
   const { group, mats, nightEmitters } = ctx;
   const g = new THREE.Group();
@@ -2606,7 +2920,7 @@ export function buildModernBlock(ctx, {
   if (openGround) nightEmitters.push(frontMat);
   // core & plinth
   if (by > 0) meshBox(g, mats.facadeStone, w + .9, by, d + .9, 0, by / 2, 0);
-  else meshBox(g, mats.stoneDark, w + .7, .8, d + .7, 0, .4, 0);
+  else if (!noBase) meshBox(g, mats.stoneDark, w + .7, .8, d + .7, 0, .4, 0);
   // openInterior：不填实心体，由内景模块另建墙壳/楼板；外立面贴图仍在
   if (!openInterior && openGround) {
     // 首层前脸掏空：后方 5.3m 实体 + 两端实体 + 上部整层压顶，形成 2.2m 进深外廊
@@ -2639,7 +2953,7 @@ export function buildModernBlock(ctx, {
     if (openInterior || openGround) {
       // 只做四周贴墙的腰线，避免整块横板切断室内/外廊；首层腰线会横穿门洞/窗，跳过
       if (f === 0) continue;
-      bands.push(tbox(w + .28, .16, .32, 0, y, d / 2 - cd, 0));
+      if (!noFrontBand) bands.push(tbox(w + .28, .16, .32, 0, y, d / 2 - cd, 0));
       bands.push(tbox(w + .28, .16, .32, 0, y, -d / 2, 0));
       bands.push(tbox(.32, .16, sideD + .28, -w / 2, y, sideZ, 0));
       bands.push(tbox(.32, .16, sideD + .28, w / 2, y, sideZ, 0));
@@ -2804,7 +3118,8 @@ export function buildModernBlock(ctx, {
 // 东西两块为 5 层长条（进深占满 48m）；南北两块为 5.5 层（宽 20m，夹在内院两侧），平屋顶。
 export function buildDianjiaoRing(ctx, {
   x, z, w = 47, d = 48, court = 20, floorsEW = 5, floorsNS = 5.5, key = 'lab',
-  glassAtrium = false, entrance = true, roofBulk = true
+  glassAtrium = false, entrance = true, roofBulk = true,
+  thickenE = 0, slot = null,
 } = {}) {
   const { group, mats, nightEmitters, nightLights } = ctx;
   const g = new THREE.Group();
@@ -2814,16 +3129,26 @@ export function buildDianjiaoRing(ctx, {
   const hFace = floorsEW * floorH + 1.2;  // 立面贴图按 5 层窗排绘制
   const ewW = (w - court) / 2;            // 东西块宽 13.5
   const nsD = (d - court) / 2;            // 南北块深 14
-  const xEW = court / 2 + ewW / 2;        // 16.75
+  const ewWE = ewW + thickenE;            // 东块加厚后宽度（空中走廊贯通时为 15）
+  const xEW = court / 2 + ewW / 2;        // 西块中心 16.75
+  const xEWE = court / 2 + ewWE / 2;      // 东块中心（加厚后 17.5）
   const zNS = court / 2 + nsD / 2;        // 17
 
-  // 四块主体（内院不填）
-  meshBox(g, mats.plaster, ewW, hEW, d, xEW, hEW / 2, 0);
+  // 四块主体（内院不填）；东块可整体加厚，并在空中走廊穿越处留出全进深槽口
+  if (slot) {
+    const bx = court / 2;   // 东块西边线（局部 10）
+    meshBox(g, mats.plaster, slot.x0 - bx, hEW, d, (bx + slot.x0) / 2, hEW / 2, 0);
+    meshBox(g, mats.plaster, slot.x1 - slot.x0, slot.y0, d, (slot.x0 + slot.x1) / 2, slot.y0 / 2, 0);
+    meshBox(g, mats.plaster, slot.x1 - slot.x0, hEW - slot.y1, d,
+      (slot.x0 + slot.x1) / 2, (slot.y1 + hEW) / 2, 0);
+  } else {
+    meshBox(g, mats.plaster, ewWE, hEW, d, xEWE, hEW / 2, 0);
+  }
   meshBox(g, mats.plaster, ewW, hEW, d, -xEW, hEW / 2, 0);
   meshBox(g, mats.plaster, court, hNS, nsD, 0, hNS / 2, zNS);
   meshBox(g, mats.plaster, court, hNS, nsD, 0, hNS / 2, -zNS);
   // 石砌基座：逐块铺，内院留空
-  meshBox(g, mats.stoneDark, ewW + .7, .8, d, xEW, .4, 0);
+  meshBox(g, mats.stoneDark, ewWE + .7, .8, d, xEWE, .4, 0);
   meshBox(g, mats.stoneDark, ewW + .7, .8, d, -xEW, .4, 0);
   meshBox(g, mats.stoneDark, court, .8, nsD + .7, 0, .4, zNS);
   meshBox(g, mats.stoneDark, court, .8, nsD + .7, 0, .4, -zNS);
@@ -2832,7 +3157,7 @@ export function buildDianjiaoRing(ctx, {
   const yard = new THREE.Mesh(new THREE.PlaneGeometry(court, court), mats.slab);
   yard.rotation.x = -Math.PI / 2; yard.position.y = .065; yard.receiveShadow = true; g.add(yard);
 
-  // 立面材质：48m 长面 / 20m 短面 / 13.5m 端面 各自 repeat
+  // 立面材质：48m 长面 / 20m 短面 / 东块端面 各自 repeat
   const fmWide = cloneFacadeMats(mats, key, d, ewW, hFace);
   const fmNarrow = cloneFacadeMats(mats, key, court, court, hFace);
   const fmEnd = cloneFacadeMats(mats, key, ewW, d, hFace);
@@ -2843,13 +3168,40 @@ export function buildDianjiaoRing(ctx, {
   };
   // 外立面：南（中间 20m 高、两端 13.5m 低）、北、东、西
   face(fmNarrow.front, court, hFace, 0, hFace / 2, d / 2 + .012, 0);
-  face(fmEnd.front, ewW, hEW, xEW, hEW / 2, d / 2 + .012, 0);
-  face(fmEnd.front, ewW, hEW, -xEW, hEW / 2, d / 2 + .012, 0);
   face(fmNarrow.front, court, hFace, 0, hFace / 2, -d / 2 - .012, Math.PI);
-  face(fmEnd.front, ewW, hEW, xEW, hEW / 2, -d / 2 - .012, Math.PI);
+  // 西块端立面、西立面
+  face(fmEnd.front, ewW, hEW, -xEW, hEW / 2, d / 2 + .012, 0);
   face(fmEnd.front, ewW, hEW, -xEW, hEW / 2, -d / 2 - .012, Math.PI);
-  face(fmWide.front, d, hEW, w / 2 + .012, hEW / 2, 0, Math.PI / 2);
   face(fmWide.front, d, hEW, -w / 2 - .012, hEW / 2, 0, -Math.PI / 2);
+  // 东块端立面：贯通空中走廊时在槽口 4m 段切成上、下两片，留出洞口
+  const eastEnd = (a, b, h0, h1, pz, ry) => {
+    const wSpan = b - a, hSpan = h1 - h0;
+    const mat = sliceFacadeMat(fmEnd.front, wSpan, hSpan, ry ? ewWE - b : a, h0, hEW);
+    nightEmitters.push(mat);
+    face(mat, wSpan, hSpan, xEWE - ewWE / 2 + (a + b) / 2, (h0 + h1) / 2, pz, ry);
+  };
+  if (slot) {
+    const sx = slot.x0 - court / 2, sw = slot.x1 - slot.x0;
+    for (const [pz, ry] of [[d / 2 + .012, 0], [-d / 2 - .012, Math.PI]]) {
+      eastEnd(0, sx, 0, hEW, pz, ry);
+      eastEnd(sx, sx + sw, 0, slot.y0, pz, ry);
+      eastEnd(sx, sx + sw, slot.y1, hEW, pz, ry);
+    }
+  } else {
+    eastEnd(0, ewWE, 0, hEW, d / 2 + .012, 0);
+    eastEnd(0, ewWE, 0, hEW, -d / 2 - .012, Math.PI);
+  }
+  // 东立面：槽口高度带整条掏空，立面分上下两片
+  const eastFaceX = xEWE + ewWE / 2 + .012;
+  if (slot) {
+    for (const [h0, h1] of [[0, slot.y0], [slot.y1, hEW]]) {
+      const mat = sliceFacadeMat(fmWide.front, d, h1 - h0, 0, h0, hEW);
+      nightEmitters.push(mat);
+      face(mat, d, h1 - h0, eastFaceX, (h0 + h1) / 2, 0, Math.PI / 2);
+    }
+  } else {
+    face(fmWide.front, d, hEW, eastFaceX, hEW / 2, 0, Math.PI / 2);
+  }
   // 内院四立面
   face(fmNarrow.front, court, hFace, 0, hFace / 2, court / 2 - .012, Math.PI);
   face(fmNarrow.front, court, hFace, 0, hFace / 2, -court / 2 + .012, 0);
@@ -2860,7 +3212,13 @@ export function buildDianjiaoRing(ctx, {
   const bandsEW = [], bandsNS = [];
   for (let f = 0; f <= floorsEW; f++) {
     const y = 1.2 + f * floorH;
-    bandsEW.push(tbox(ewW + .28, .16, d, xEW, y, 0, 0));
+    if (slot && y > slot.y0 && y < slot.y1) {
+      // 落在槽口高度内的白带只铺到槽口西缘
+      const bw = slot.x0 - court / 2 + .14;
+      bandsEW.push(tbox(bw, .16, d, court / 2 - .14 + bw / 2, y, 0, 0));
+    } else {
+      bandsEW.push(tbox(ewWE + .28, .16, d, xEWE, y, 0, 0));
+    }
     bandsEW.push(tbox(ewW + .28, .16, d, -xEW, y, 0, 0));
     bandsNS.push(tbox(court, .16, nsD + .28, 0, y, zNS, 0));
     bandsNS.push(tbox(court, .16, nsD + .28, 0, y, -zNS, 0));
@@ -2870,16 +3228,18 @@ export function buildDianjiaoRing(ctx, {
   addMerged(g, bandsEW, mats.plasterCool);
   addMerged(g, bandsNS, mats.plasterCool);
 
-  // 红檐带 + 白色女儿墙
+  // 红檐带 + 白色女儿墙（东块按加厚后的宽度）
   for (const s of [-1, 1]) {
-    meshBox(g, mats.redBeam, ewW + .35, .34, d + .35, s * xEW, hEW - .1, 0);
-    meshBox(g, mats.plasterCool, ewW + .55, .18, d + .55, s * xEW, hEW + .08, 0);
+    const bw = s > 0 ? ewWE : ewW, bx = s > 0 ? xEWE : xEW;
+    meshBox(g, mats.redBeam, bw + .35, .34, d + .35, bx, hEW - .1, 0);
+    meshBox(g, mats.plasterCool, bw + .55, .18, d + .55, bx, hEW + .08, 0);
     meshBox(g, mats.redBeam, court + .35, .34, nsD + .35, 0, hNS - .1, s * zNS);
     meshBox(g, mats.plasterCool, court + .55, .18, nsD + .55, 0, hNS + .08, s * zNS);
   }
   // 平屋顶
   for (const s of [-1, 1]) {
-    meshBox(g, mats.roofDark, ewW + .7, .2, d + .7, s * xEW, hEW + .1, 0);
+    const bw = s > 0 ? ewWE : ewW, bx = s > 0 ? xEWE : xEW;
+    meshBox(g, mats.roofDark, bw + .7, .2, d + .7, bx, hEW + .1, 0);
     meshBox(g, mats.roofDark, court + .7, .2, nsD + .7, 0, hNS + .1, s * zNS);
   }
 
@@ -2918,6 +3278,37 @@ export function buildDianjiaoRing(ctx, {
   g.position.set(x, 0, z);
   group.add(g);
   return g;
+}
+
+let _nationalFlagTex = null;
+/** 五星红旗贴图（红底 + 一大四小黄星），泮池与田径场两面旗共用 */
+function nationalFlagTexture() {
+  if (_nationalFlagTex) return _nationalFlagTex;
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = 332;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#c8352a'; c.fillRect(0, 0, cv.width, cv.height);
+  const star = (cx, cy, r, rot = 0) => {
+    c.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const a = rot - Math.PI / 2 + i * Math.PI * 2 / 5;
+      c.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+      c.lineTo(cx + Math.cos(a + Math.PI / 5) * r * .42, cy + Math.sin(a + Math.PI / 5) * r * .42);
+    }
+    c.closePath(); c.fill();
+  };
+  c.fillStyle = '#f5c531';
+  const bx = cv.width * .19, by = cv.height * .30, br = cv.height * .155;
+  star(bx, by, br);
+  const sr = cv.height * .062;
+  for (const [dx, dy] of [[.345, .155], [.395, .265], [.395, .385], [.345, .495]]) {
+    const cx = cv.width * dx, cy = cv.height * dy;
+    star(cx, cy, sr, Math.atan2(by - cy, bx - cx) + Math.PI / 2);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  _nationalFlagTex = tex;
+  return tex;
 }
 
 function textTextureLocal(text) {
@@ -2982,15 +3373,35 @@ export function buildTrack(ctx) {
   infieldGeo.rotateX(-Math.PI / 2);
   const infield = new THREE.Mesh(infieldGeo, mats.infield);
   infield.position.y = .075; infield.receiveShadow = true; g.add(infield);
-  // lane lines
+  // 分道线：改为受光贴地窄带（原 LineBasicMaterial 不吃光照，夜里整圈发亮）
+  function laneRibbon(points, width, y) {
+    const pos = [], uv = [], nor = [], idx = [];
+    const hw = width / 2;
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i], b = points[i + 1];
+      const dx = b.x - a.x, dz = b.z - a.z;
+      const l = Math.hypot(dx, dz) || 1e-6;
+      const nx = -dz / l * hw, nz = dx / l * hw;
+      const base = pos.length / 3;
+      pos.push(a.x + nx, y, a.z + nz, a.x - nx, y, a.z - nz, b.x - nx, y, b.z - nz, b.x + nx, y, b.z + nz);
+      uv.push(0, 0, 1, 0, 1, 1, 0, 1);
+      nor.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0);
+      idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    return geo;
+  }
+  const laneGeoms = [];
   for (let lane = 0; lane <= 8; lane++) {
     const hw = ri + (ro - ri) * (lane / 8);
     const halfL = halfLi + (halfLo - halfLi) * (lane / 8);
-    const pts = stadiumPath(hw - .05, halfL - .05).map(p => p.setY(.105));
-    const geo = new THREE.BufferGeometry().setFromPoints(pts);
-    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xe9e3d2, transparent: true, opacity: .55 }));
-    g.add(line);
+    laneGeoms.push(laneRibbon(stadiumPath(hw - .05, halfL - .05), .12, .105));
   }
+  addMerged(g, laneGeoms, mats.trackLine, { cast: false });
   // start / finish
   const finish = new THREE.Mesh(new THREE.PlaneGeometry(ro - ri, .35), mats.whiteLine);
   finish.rotation.x = -Math.PI / 2; finish.position.set((ro + ri) / 2, .11, halfLo - .5); g.add(finish);
@@ -3015,13 +3426,27 @@ export function buildTrack(ctx) {
     const cross = new THREE.Mesh(new THREE.CylinderGeometry(.09, .09, 8.5, 6), mats.whiteLine);
     cross.rotation.z = Math.PI / 2; cross.position.set(0, 2.55, s * pitchD / 2); g.add(cross);
   }
+  // 田径场国旗旗杆：位于跑道东西对称轴（z=69）与西直道内侧草地交点（世界 x≈43.5）
+  // 站在司令台向东看正对旗面；旗面朝东西向、沿南北展开
+  {
+    const FX = -36.5, FZ = 0;   // 局部坐标，group 偏移 (80,69) → (43.5, 69)
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(.1, .16, 15, 8), mats.whiteLine);
+    pole.position.set(FX, 7.8, FZ); pole.castShadow = true; g.add(pole);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.2, .35, 16), mats.marble);
+    base.position.set(FX, .18, FZ); base.receiveShadow = true; g.add(base);
+    const flagGeo = new THREE.PlaneGeometry(4.0, 2.6, 12, 4);
+    const flag = new THREE.Mesh(flagGeo, new THREE.MeshStandardMaterial({ map: nationalFlagTexture(), side: THREE.DoubleSide, roughness: .8, emissive: 0x4a0c08, emissiveIntensity: .55 }));
+    flag.position.set(FX, 13.3, FZ + 2.0);
+    flag.rotation.y = -Math.PI / 2;
+    flag.castShadow = true; g.add(flag);
+    ctx.fieldFlag = flag; ctx.fieldFlagGeo = flagGeo;
+  }
   // 跑道西侧的粉色球场群（篮球场×2 / 司令台 / 排球场）
   {
     const pinkMat = new THREE.MeshStandardMaterial({ color: 0xa9584f, roughness: .92 });
     const courts = [
       [-55, -70, 14, 27, true], // 篮球场（南）
       [-56, -43, 14, 27, true], // 篮球场（北）
-      [-52, -11, 13, 24, false], // 司令台
       [-54, 27, 15, 24, false],  // 排球场
     ];
     for (const [x, z, w, d, teal] of courts) {
@@ -3104,7 +3529,7 @@ export function buildTrack(ctx) {
         const sx = s * (SW / 2 + 1.7);
         meshBox(stand, standStone, 3.2, SH, 1.9, sx, SH / 2, -RUN / 2 - 1.0);
       }
-      stand.position.set(-52, 0, -11);
+      stand.position.set(-55, 0, -6);
       stand.rotation.y = Math.PI / 2;   // 正面朝东对跑道
       g.add(stand);
     }

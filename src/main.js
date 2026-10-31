@@ -5,6 +5,7 @@ import { Environment } from './core/sky.js';
 import { Post } from './core/post.js';
 import { Campus } from './world/campus.js';
 import { createCharacter } from './world/character.js';
+import { createHero2 } from './world/hero2.js';
 import { Labels } from './ui/labels.js';
 
 const $ = (s) => document.querySelector(s);
@@ -44,11 +45,35 @@ const env = new Environment(scene, renderer);
 if (isMobile) env.sun.shadow.mapSize.set(1024, 1024);
 const post = new Post(renderer, scene, camera, { mobile: isMobile });
 const campus = new Campus(scene, mats);
-env.registerNight(campus.nightEmitters, campus.nightLights);
+// 夜景只保留灯具的点光源照明，窗户/灯罩/发光贴片等自发光全部关闭
+env.registerNight([], campus.nightLights);
 
-/* ---------------- 可操控小人 ---------------- */
-const player = createCharacter();
+/* ---------------- 可操控小人：竹节木偶 / 主角二号 可切换 ---------------- */
+const puppet = createCharacter();
+const hero2 = createHero2();
+hero2.group.visible = false;
+const player = {
+  group: new THREE.Group(),
+  heroes: [puppet, hero2],
+  idx: 0,
+  get current() { return this.heroes[this.idx]; },
+  update(dt, speed, moving, night) { this.current.update(dt, speed, moving, night); },
+};
+player.group.add(puppet.group, hero2.group);
 scene.add(player.group);
+
+const heroBtn = $('#heroBtn');
+function switchHero() {
+  const next = 1 - player.idx;
+  if (player.heroes[next].ready === false) return false;
+  player.current.group.visible = false;
+  player.heroes[next].group.visible = true;
+  player.idx = next;
+  heroBtn.textContent = next === 1 ? '②' : '①';
+  heroBtn.classList.toggle('on', next === 1);
+  return true;
+}
+heroBtn.addEventListener('click', switchHero);
 
 // 固定出生点：校门内中轴广场（不再随机）
 const spawn = new THREE.Vector3(-28, campus.groundY(-28, 120), 120);
@@ -199,6 +224,7 @@ addEventListener('keydown', (e) => {
     e.preventDefault();
   }
   if (k === 'n') setMode(state.mode === 'day' ? 'night' : 'day');
+  if (k === 'c') switchHero();
   if (k === 'l') { state.labels = !state.labels; labels.setEnabled(state.labels); $('#showLabels').checked = state.labels; }
 });
 addEventListener('keyup', (e) => {
@@ -437,5 +463,7 @@ window.__ZH = {
   jump: () => { if (onGround) { vy = JUMP_V; onGround = false; } return { vy, onGround }; },
   phys: () => ({ vy, onGround, gy: campus.groundY(player.group.position.x, player.group.position.z, player.group.position.y), y: player.group.position.y, freeCam }),
   select: (id) => { const l = campus.landmarks.find(x => x.id === id); if (l) selectLandmark(l); },
+  switchHero,
+  hero: () => ({ idx: player.idx, ready: player.heroes.map(h => h.ready !== false) }),
   rendererInfo: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),
 };

@@ -1,4 +1,6 @@
 node_modules
 dist
 shots
+screenshots
+.trae-html-share-packages
 .DS_Store

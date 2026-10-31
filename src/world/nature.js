@@ -31,11 +31,35 @@ function aLaneDist(x, z) {
 const A_CANOPY = { camphor: 5.5, pine: 5.3, cypress: 2.8, willow: 5.0, cherry: 4.2, ginkgo: 4.9 };
 const aLaneClear = (x, z, type) => aLaneDist(x, z) >= (A_CANOPY[type] || 2.2);
 
+// 泮池前东西两条斜向石板路（与 campus.js slabPath 一致）：左右镜像，17×6.6
+const PAN_WINGS = [
+  { cx: -42.58, cz: 99.9, ry: 0.415, hl: 8.5, hw: 3.3 },
+  { cx: -13.42, cz: 99.9, ry: -0.415, hl: 8.5, hw: 3.3 },
+];
+// 斜路外端向北直铺的 6.6×10m 段（正北轴对齐，与 campus.js 一致）
+const PAN_EXT = [
+  [ -53.73, -47.13, 86.54, 96.54 ],
+  [ -8.87, -2.27, 86.54, 96.54 ],
+];
+/** 点是否落在斜向石板路或北延段（含外扩余量）内 */
+function onPanWing(x, z, margin = 0) {
+  for (const w of PAN_WINGS) {
+    const dx = x - w.cx, dz = z - w.cz;
+    const u = dx * Math.cos(w.ry) + dz * Math.sin(w.ry);
+    const v = -dx * Math.sin(w.ry) + dz * Math.cos(w.ry);
+    if (Math.abs(u) <= w.hl + margin && Math.abs(v) <= w.hw + margin) return true;
+  }
+  for (const [x0, x1, z0, z1] of PAN_EXT) {
+    if (x >= x0 - margin && x <= x1 + margin && z >= z0 - margin && z <= z1 + margin) return true;
+  }
+  return false;
+}
+
 const SEASONS = {
-  spring: { camphor: '#6d844f', pine: '#46613f', cypress: '#3c5539', willow: '#8a9e5b', cherry: '#e4b3bf', ginkgo: '#c9ae55', grass: '#657c50' },
-  summer: { camphor: '#405a33', pine: '#334d35', cypress: '#2d4531', willow: '#607f3e', cherry: '#4f6d3e', ginkgo: '#d8b440', grass: '#526a40' },
-  autumn: { camphor: '#826437', pine: '#43543a', cypress: '#374832', willow: '#9d7a40', cherry: '#915f3b', ginkgo: '#e2b63a', grass: '#6c6d48' },
-  winter: { camphor: '#4e5846', pine: '#384538', cypress: '#2f3e32', willow: '#656b50', cherry: '#5f5f50', ginkgo: '#d9a92f', grass: '#5b6250' }
+  spring: { camphor: '#6d844f', pine: '#46613f', cypress: '#3c5539', willow: '#8a9e5b', cherry: '#e4b3bf', ginkgo: '#c9ae55', maple: '#b34a33', grass: '#657c50' },
+  summer: { camphor: '#405a33', pine: '#334d35', cypress: '#2d4531', willow: '#607f3e', cherry: '#4f6d3e', ginkgo: '#d8b440', maple: '#a3382b', grass: '#526a40' },
+  autumn: { camphor: '#826437', pine: '#43543a', cypress: '#374832', willow: '#9d7a40', cherry: '#915f3b', ginkgo: '#e2b63a', maple: '#c2472c', grass: '#6c6d48' },
+  winter: { camphor: '#4e5846', pine: '#384538', cypress: '#2f3e32', willow: '#656b50', cherry: '#5f5f50', ginkgo: '#d9a92f', maple: '#7b3026', grass: '#5b6250' }
 };
 
 function merge(geos) { return mergeGeometriesSafe(geos); }
@@ -44,7 +68,6 @@ function merge(geos) { return mergeGeometriesSafe(geos); }
 const COURT_AREAS = [
   [16.8, -15.7, 33.2, 13.7], // 篮球场（南）
   [15.8, 11.3, 32.2, 40.7], // 篮球场（北）
-  [20.3, 44.8, 35.7, 71.2], // 司令台场地
   [17.3, 82.8, 34.7, 109.2], // 排球场
 ];
 const onCourt = (x, z) => COURT_AREAS.some(([x0, z0, x1, z1]) => x > x0 && x < x1 && z > z0 && z < z1);
@@ -177,6 +200,17 @@ function cherryGeo() {
   return { trunk: merge(trunk), canopy: addCanopyColors(merge(canopy)) };
 }
 
+// 红枫：直立主干、扁圆密冠，冠底 2.6m 以上（跨桥头不压头），叶色常年偏红（水池东岸三角草坪三株）
+function mapleGeo() {
+  const trunk = [tcyl(.18, .3, 3.6, 0, 1.8, 0, 7)];
+  const canopy = [];
+  for (const [x, y, z, s] of [[0, 4.1, 0, 1.5], [1.0, 3.9, .5, 1.0], [-1.0, 4.0, -.4, 1.05],
+    [.3, 4.9, -.5, .9], [.7, 3.8, -1.0, .8], [-.8, 3.9, 1.0, .85]]) {
+    const g = new THREE.IcosahedronGeometry(1, 1); g.scale(s, s * .72, s); g.translate(x, y, z); canopy.push(g);
+  }
+  return { trunk: merge(trunk), canopy: addCanopyColors(merge(canopy)) };
+}
+
 // 银杏：直立主干、高冠，冠形较窄（体艺馆西翼南侧银杏林，视频 0–7s）
 function ginkgoGeo() {
   const trunk = [tcyl(.26, .4, 5.4, 0, 2.7, 0, 8)];
@@ -224,6 +258,7 @@ export class Nature {
     this._buildGinkgoGrove();
     this._buildHedges();
     this._buildShrubs();
+    this._buildPanPondGarden();
     this._buildCorridorGarden();
     this._buildLeaves();
     this._buildBirds();
@@ -304,6 +339,7 @@ export class Nature {
       [-100, -101, -53, -51], // 电教楼
       [-93, -53, -76, -35], // 书吧（14×16）
       [-79, -22, -63, -12], // 自习室
+      [-68, -10, -51, 16], // 自习室东南石桥水池（水面、驳岸、假山、石灯笼、桥）
       [-73, -51, -55.8, -23], // 沁园（整体下沉区，树木按地势落位）
       [-8, -107, 64, -63], // 体艺馆
       [-42, -108, -8, -90], // 体艺馆西翼
@@ -330,7 +366,7 @@ export class Nature {
       [8.0, -24.8, 17.5, 11.5], // 红廊（灰廊架）及其西/东/北/南密植区、球场侧二维栅栏
     ];
     const inRect = (x, z) => avoid.some(([x1, z1, x2, z2]) => x > x1 && x < x2 && z > z1 && z < z2);
-    const camphor = [], pine = [], cypress = [], willow = [], cherry = [], highPine = [];
+    const camphor = [], pine = [], cypress = [], willow = [], cherry = [], highPine = [], maple = [];
     // 校门—泮池：内圈灌木（见 _buildShrubs），外圈才是乔木
     for (let z = 104; z <= 136; z += 8) {
       for (const x of [-47, -9]) if (!inRect(x, z)) camphor.push([x, 0, z]);
@@ -344,7 +380,7 @@ export class Nature {
     for (let z = 68.5; z <= 81.5; z += 4.2) {
       for (const x of [-34.2, -21.8]) highPine.push([x, 0, z]);
     }
-    // 校门内中轴两旁为灌木带（见 _buildShrubs）
+    // 校门内中轴两旁为灌木带（见 _buildShrubs）；泮池南草坪只保留低矮灌木，不种乔木
     // around gate
     for (const x of [-52, -4]) {
       for (const z of [156, 164]) if (!inRect(x, z)) camphor.push([x, 0, z]);
@@ -359,6 +395,11 @@ export class Nature {
     }
     // 大成殿 flanks
     cypress.push([-42, 0, -4], [-14, 0, -4], [-42, 0, 22], [-14, 0, 22]);
+    // 自习室东南水池东岸三角草坪：三顶点各一株红枫（用户截图标注的三个顶点）
+    maple.push([-52.6, 0, 8.0], [-51.7, 0, .4], [-49.4, 0, 6.2]);
+    // 补四株（用户第二轮红圈）：两处落在教学楼巷道铺装上，就近让到路边草坪 0.8~1.2m
+    // 北端那株南移到巷道南侧草坪；大成殿台基西侧原白阶处补一株（台基边退 0.8m）
+    maple.push([-47.6, 0, 4.4], [-51.4, 0, 3.4], [-48.46, 0, 9.1], [-52.0, 0, 11.6], [-46.2, 0, 8.4]);
     // 梓荫山密林（中心 90,-37，90×36）；独立 RNG 避免改动其余随机植被落位
     const hrnd = mulberry32(9182);
     for (let i = 0; i < 820; i++) {
@@ -388,9 +429,11 @@ export class Nature {
       const x = -140 + rnd() * 370, z = -150 + rnd() * 300;
       if (inRect(x, z)) continue;
       if (hillRoadClearance(x, z) < 2.2) continue;
+      if (onPanWing(x, z, 1.2)) continue; // 泮池石板广场/斜路/北延段内不补树
       if (Math.hypot(x + 28, z - 8) < 82) continue;
       if (x > 16 && x < 150 && z > -60 && z < 162) continue;
       if (Math.hypot(x + 148, z - 118.5) < 8) continue; // 蛟川小亭周边留空
+      if (Math.hypot(x + 63, z - 94) < 6.2) continue;   // 教学楼 SW 南侧六角亭周边留空
       if (Math.hypot(x + 20, z + 127) < 8) continue;   // 甜心屋咖啡（体艺馆北、2#宿舍南）
       if (Math.hypot(x + 53.5, z + 46.8) < 6) continue; // 沁园鹅棚（走廊西侧）
       if (rnd() < .55) camphor.push([x, 0, z]);
@@ -486,6 +529,8 @@ export class Nature {
       { canopy: { r: 3.0, y0: .5, y1: 6.5, trunk: .5 }, margin: 3.0 });
     this._addType('cherry', cherryGeo(), cherry, [1.0, 1.3],
       { canopy: { r: 2.4, y0: 1.8, y1: 6.2, trunk: .42 }, margin: 2.6 });
+    this._addType('maple', mapleGeo(), maple, [.9, 1.0],
+      { canopy: { r: 2.2, y0: 2.6, y1: 5.5, trunk: .34 }, margin: 1.2, whiteScale: .8 });
   }
 
   // 体艺馆西翼南面银杏林（视频 0–7s）：白干、金黄冠、金色落叶地被
@@ -534,14 +579,13 @@ export class Nature {
       const ry = Math.atan2(dx, dz);
       geoms.push(tbox(w, h, len, (x1 + x2) / 2, h / 2, (z1 + z2) / 2, ry));
     };
-    // 中轴绿篱（泮池、大成门处断开）
+    // 中轴绿篱（泮池、大成门处断开；南端退到石板广场南缘外 z=108.1，不压铺装）
     for (const x of [-35.2, -20.8]) {
-      addRun(x, 138, x, 106);
+      addRun(x, 138, x, 108.1);
       addRun(x, 84, x, 70);
       addRun(x, 52, x, 22);
     }
-    // 田径场西侧绿篱：只保留草地段；塑胶球场范围（篮球场 z -14.5~39.5、排球场 z 84~108）内不生成
-    addRun(19.5, 39.5, 19.5, 84, .55);
+    // 田径场西侧绿篱：司令台段（z 39.5~84）已删；篮球场/排球场范围与草地段保留
     addRun(19.5, 108, 19.5, 110.4, .55);
     addRun(19.5, 127.3, 19.5, 154, .55); // 憩园院落段断开，南北墙外各留一段
     addRun(40, 163, 120, 163, .55);
@@ -571,7 +615,7 @@ export class Nature {
       const side = i % 2 ? 1 : -1;
       const x = -28 + side * (5.8 + rnd() * 1.4);
       const z = 134 - rnd() * 112;
-      if ((z > 84 && z < 106) || (z > 52 && z < 70)) continue;
+      if ((z > 84 && z < 107.8) || (z > 52 && z < 70)) continue;
       const g = new THREE.IcosahedronGeometry(.13 + rnd() * .09, 0);
       g.translate(x, .3, z); fg.push(g);
     }
@@ -588,14 +632,19 @@ export class Nature {
       if (!this.inBounds(x, z)) continue;
       if (x > 30 && x < 132 && z > -26 && z < 162) continue;
       if (onCourt(x, z)) continue; // 塑胶球场面上不生成灌木
+      if (x > -68 && x < -51 && z > -10 && z < 16) continue; // 自习室东南石桥水池：灌木不入水与驳岸
       if (x > -48 && x < -8 && z > 40 && z < 100) continue;
-      if (x > -44 && x < -12 && z > 84 && z < 106) continue;
+      // 泮池前石板广场（x −44.6…−11.4）范围内不生成灌木，避免压到铺装
+      if (x > -46 && x < -10 && z >= 100 && z < 107.8) continue;
+      if (x > -44 && x < -12 && z > 84 && z < 100) continue;
+      if (onPanWing(x, z, .55)) continue; // 斜向石板路范围内不生成灌木
+      if (Math.hypot(x + 63, z - 94) < 5.6) continue; // 教学楼 SW 南侧六角亭及台基范围
       const g = new THREE.IcosahedronGeometry(.55 + rnd() * .75, 0);
       g.scale(1, .65, 1); g.translate(x, .35 - (this.dropAt ? this.dropAt(x, z) : 0), z); geos.push(g);
     }
-    // 校门—泮池中轴两旁：连续灌木带（内圈），乔木退到 x≈±19 外圈
+    // 校门—泮池中轴两旁：连续灌木带（内圈），乔木退到 x≈±19 外圈；北端从广场南缘外 z=108.2 起
     for (const side of [-1, 1]) {
-      for (let z = 106; z <= 137; z += 1.9) {
+      for (let z = 108.2; z <= 137; z += 1.9) {
         for (let k = 0; k < 3; k++) {
           const x = -28 + side * (5.4 + k * 1.7 + (rnd() - .5) * .5);
           const g = new THREE.IcosahedronGeometry(.5 + rnd() * .3, 0);
@@ -633,6 +682,113 @@ export class Nature {
     mesh.castShadow = true; mesh.receiveShadow = true;
     this.group.add(mesh);
     this.shrubMat = mat;
+  }
+
+  // 泮池南草坪（2026-10-25 航拍）：池岸弧形绿篱、旗杆两侧球状灌木、苏铁、
+  // 长条花池、校训石碑、中轴圆形花坛；植被不登记碰撞，石碑在 campus 登记。
+  _buildPanPondGarden() {
+    const mats = this.mats;
+    const rnd = mulberry32(6412);
+    const hedgeGeos = [], topiaryGeos = [], cycadGeos = [];
+    const redGeos = [], yellowGeos = [];
+    const addHedge = (x1, z1, x2, z2, h = .58, w = .8) => {
+      const len = Math.hypot(x2 - x1, z2 - z1);
+      const ry = Math.atan2(x2 - x1, z2 - z1);
+      hedgeGeos.push(tbox(w, h, len, (x1 + x2) / 2, h / 2, (z1 + z2) / 2, ry));
+    };
+    // 1) 池外弧形石铺装南缘的连续绿篱：按圆弧半径取样，随弧转向
+    {
+      const zc = 75.532, r = 20.77; // 池外石铺装外弧圆心/半径（buildPanPond: pD 11.7 → pR 20.32）
+      let prev = null;
+      for (let x = -41.5; x <= -14.5 + 1e-6; x += .9) {
+        const dx = x + 28;
+        const z = zc + Math.sqrt(Math.max(0, r * r - dx * dx));
+        if (prev) addHedge(prev[0], prev[1], x, z, .56, .78);
+        prev = [x, z];
+      }
+    }
+    // 2) 旗杆北侧两株球状灌木（紧贴基座两侧）
+    for (const x of [-29.6, -26.4]) {
+      const g = new THREE.IcosahedronGeometry(.62, 1);
+      g.scale(1, .92, 1); g.translate(x, .56, 96.75); topiaryGeos.push(g);
+    }
+    // 3) 长条花池（7.4×1.3）+ 白石压顶长凳 + 南缘一排黄绿球形灌木
+    hedgeGeos.push(tbox(7.4, .62, 1.3, -28, .31, 100.0, 0));
+    for (let x = -31.1; x <= -24.9 + 1e-6; x += .78) {
+      const g = new THREE.IcosahedronGeometry(.3, 1);
+      g.scale(1, .9, 1); g.translate(x, .62, 100.32); topiaryGeos.push(g);
+    }
+    // 4) 花池外侧一对苏铁（叶片放射）
+    const cycad = (x, z, s = 1) => {
+      cycadGeos.push(tcyl(.11 * s, .18 * s, .9 * s, x, .45 * s, z, 7));
+      for (let i = 0; i < 13; i++) {
+        const a = i / 13 * Math.PI * 2 + rnd() * .18;
+        const len = (1.0 + rnd() * .28) * s;
+        cycadGeos.push(tbox(len, .05 * s, .22 * s,
+          x + Math.cos(a) * len * .42, .92 * s + rnd() * .1, z + Math.sin(a) * len * .42,
+          -a, 0, -.38 + rnd() * .12));
+      }
+    };
+    cycad(-33.4, 99.6, 1.05);
+    cycad(-22.6, 99.6, 1.05);
+    // 5) 泮池前草坪低矮灌木：池岸与花池之间的草坪 + 石板广场两侧草带（均不压路面）
+    for (const side of [-1, 1]) {
+      for (let z = 96.9; z <= 99.4 + 1e-6; z += 1.25) {
+        for (const off of [5.8, 7.6]) {
+          const bx = -28 + side * (off + (rnd() - .5) * .35);
+          const bz = z + (rnd() - .5) * .4;
+          if (onPanWing(bx, bz, .4)) continue; // 斜向石板路范围内不放灌木
+          const g = new THREE.IcosahedronGeometry(.4 + rnd() * .2, 0);
+          g.scale(1.15, .62, 1.15);
+          g.translate(bx, .27, bz);
+          hedgeGeos.push(g);
+        }
+      }
+    }
+    // 7) 中轴圆形花坛（红环 + 黄心），坐于旗杆南侧石板铺装上
+    {
+      const cx = -28, cz = 102.75;
+      for (let i = 0; i < 22; i++) {
+        const a = i / 22 * Math.PI * 2 + rnd() * .12;
+        const rad = 1.18 + rnd() * .18;
+        const g = new THREE.IcosahedronGeometry(.13 + rnd() * .06, 0);
+        g.translate(cx + Math.cos(a) * rad, .28, cz + Math.sin(a) * rad);
+        redGeos.push(g);
+      }
+      for (let i = 0; i < 26; i++) {
+        const a = i / 26 * Math.PI * 2 + rnd() * .15;
+        const rad = .45 + rnd() * .55;
+        const g = new THREE.IcosahedronGeometry(.12 + rnd() * .07, 0);
+        g.translate(cx + Math.cos(a) * rad, .3, cz + Math.sin(a) * rad);
+        yellowGeos.push(g);
+      }
+      const ring = new THREE.Mesh(new THREE.CylinderGeometry(1.55, 1.6, .2, 24, 1, true), mats.stone);
+      ring.position.set(cx, .1, cz); ring.receiveShadow = true; this.group.add(ring);
+    }
+    const mkMat = (color, rough = .95) => new THREE.MeshStandardMaterial({ color, roughness: rough });
+    const hedgeMat = mkMat(0x3b5737, .98);
+    const topiaryMat = mkMat(0x7c9548, .95);
+    if (hedgeGeos.length) {
+      const m = new THREE.Mesh(merge(hedgeGeos), hedgeMat);
+      m.castShadow = true; m.receiveShadow = true; this.group.add(m);
+    }
+    if (topiaryGeos.length) {
+      const m = new THREE.Mesh(merge(topiaryGeos), topiaryMat);
+      m.castShadow = true; m.receiveShadow = true; this.group.add(m);
+    }
+    if (cycadGeos.length) addMerged(this.group, cycadGeos, mats.cycad);
+    if (redGeos.length) addMerged(this.group, redGeos, mkMat(0xbf4a3c, .9));
+    if (yellowGeos.length) addMerged(this.group, yellowGeos, mkMat(0xd9c245, .9));
+    // 校训石碑（对照实景）：灰麻石横碑 + 金色“励志 进取 勤奋 健美”，立于花池北侧、旗杆之前
+    {
+      const stoneMat = mkMat(0x8b8d84, .92), footMat = mkMat(0x75786e, .95);
+      const stone = new THREE.Mesh(new THREE.BoxGeometry(5.0, 1.24, .4), stoneMat);
+      stone.position.set(-28, .92, 99.25); stone.castShadow = true; stone.receiveShadow = true; this.group.add(stone);
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(5.3, .3, .48), footMat);
+      foot.position.set(-28, .15, 99.25); foot.castShadow = true; foot.receiveShadow = true; this.group.add(foot);
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(4.72, .97), new THREE.MeshBasicMaterial({ map: mats.plaques.motto }));
+      face.position.set(-28, .92, 99.451); this.group.add(face);
+    }
   }
 
   // 红廊（灰廊架）周边环境：西侧苏铁/蕨类/紫红地被/白干乔木，东侧竹丛遮挡球场栅栏；
