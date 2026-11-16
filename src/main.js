@@ -6,6 +6,10 @@ import { Post } from './core/post.js';
 import { Campus } from './world/campus.js';
 import { createCharacter } from './world/character.js';
 import { createHero2 } from './world/hero2.js';
+import { Effects } from './world/effects.js';
+import { Npc } from './world/npc.js';
+import { buildKongziStatue } from './world/buildings.js';
+import { buildSeatedStatue } from './world/interiors.js';
 import { Labels } from './ui/labels.js';
 
 const $ = (s) => document.querySelector(s);
@@ -48,6 +52,17 @@ const campus = new Campus(scene, mats);
 // 夜景只保留灯具的点光源照明，窗户/灯罩/发光贴片等自发光全部关闭
 env.registerNight([], campus.nightLights);
 
+/* ---------------- 剧本动效与铜像 NPC ---------------- */
+// 铜像直接复用校园里的坐像模型：孔子坐像在大成殿祭坛上，林公像在林则徐纪念堂。
+// 剧本里它们不做骨骼动画，只整体平移（用户明确要求「铜人平移即可」）
+const effects = new Effects(campus);
+const kongziModel = buildKongziStatue(mats);
+const linHost = new THREE.Group();
+const linModel = buildSeatedStatue(linHost, mats, 0, 0, 0);
+const kongzi = new Npc(campus, { name: '孔子', x: -28, z: 6, facing: 0, model: kongziModel, height: 2.3 });
+const lin = new Npc(campus, { name: '林则徐', x: 101, z: -56, facing: -Math.PI / 2, model: linModel, height: 2.3 });
+const npcs = [kongzi, lin];
+
 /* ---------------- 可操控小人：竹节木偶 / 主角二号 可切换 ---------------- */
 const puppet = createCharacter();
 const hero2 = createHero2();
@@ -79,6 +94,7 @@ heroBtn.addEventListener('click', switchHero);
 const spawn = new THREE.Vector3(-28, campus.groundY(-28, 120), 120);
 player.group.position.copy(spawn);
 let vy = 0, onGround = true;
+let airDx = 0, airDz = 0, airSpeed = 0;
 const JUMP_V = 6.4, GRAVITY = 18;
 // 选一个身后最开阔的方向放相机，避免出生就被建筑贴脸
 function openDirection(x, z) {
@@ -240,6 +256,9 @@ const joyEl = $('#joy');
 const joyKnob = joyEl.querySelector('i');
 if (isMobile) joyEl.classList.remove('hidden');
 let joyPointer = null;
+// 剧本驾驶时摇杆也要跟着动：手柄偏移量做平滑，停下自动回中
+let joyKx = 0, joyKy = 0;
+const joyPrevPos = new THREE.Vector3();
 function moveJoy(e) {
   const r = joyEl.getBoundingClientRect();
   let dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2);
@@ -268,8 +287,12 @@ joyEl.addEventListener('pointercancel', endJoy);
 /* 小人移动 + 第三人称跟身相机 */
 const camFwd = new THREE.Vector3(), camRight = new THREE.Vector3();
 const prevPos = new THREE.Vector3(), moveDelta = new THREE.Vector3();
+// 小人身体半径：碰撞按「中心点 + 半径」判定，避免肩/腿插进课桌和墙里（视觉穿模）
+// 取 .15：教室两排课桌之间实测净宽约 .54m，半径再大就走不过去了
+const PLAYER_R = .15;
 let walkBlend = 0;
 let lookHold = 0;
+
 // 俯仰回正：一旦偏离水平，立即以 30°/s 回到水平视角
 const LEVEL_SPEED = THREE.MathUtils.degToRad(30);
 controls.addEventListener('start', () => { lookHold = 2.2; });
@@ -309,27 +332,49 @@ function autoAlignCamera(dt) {
   camera.position.set(tgt.x + Math.sin(a) * len, camera.position.y, tgt.z + Math.cos(a) * len);
 }
 function updatePlayer(dt) {
+  const pos = player.group.position;
+  let wdx = 0, wdz = 0, speed = 0, forward = true;
   const f = clamp((held.w ? 1 : 0) - (held.s ? 1 : 0) - joy.y, -1, 1);
   const r = clamp((held.d ? 1 : 0) - (held.a ? 1 : 0) + joy.x, -1, 1);
   const len = Math.hypot(f, r);
-  const pos = player.group.position;
-  prevPos.copy(pos);
-  let speed = 0;
   if (len > .04) {
     camera.getWorldDirection(camFwd); camFwd.y = 0;
     if (camFwd.lengthSq() < 1e-6) camFwd.set(0, 0, -1);
     camFwd.normalize();
     camRight.crossVectors(camFwd, camera.up).normalize();
     speed = held.shift ? 12 : 6;
-    const mx = (camFwd.x * (f / len) + camRight.x * (r / len)) * speed * dt;
-    const mz = (camFwd.z * (f / len) + camRight.z * (r / len)) * speed * dt;
+    wdx = camFwd.x * (f / len) + camRight.x * (r / len);
+    wdz = camFwd.z * (f / len) + camRight.z * (r / len);
+    const l = Math.hypot(wdx, wdz) || 1;
+    wdx /= l; wdz /= l;
+    forward = f >= 0;
+  }
+  // 起跳后保留水平动量：空中不再受输入驱动时继续沿原方向平移，跳河跨沟才能过去
+  if (onGround && speed > 0 && (wdx || wdz)) { airDx = wdx; airDz = wdz; airSpeed = speed; }
+  if (!onGround && speed === 0 && airSpeed > 0) { speed = airSpeed; wdx = airDx; wdz = airDz; forward = false; }
+  prevPos.copy(pos);
+  if (speed > 0 && (wdx || wdz)) {
+    const mx = wdx * speed * dt;
+    const mz = wdz * speed * dt;
+    const sprint = held.shift;
     // 分轴碰撞：建筑/石头不可穿过；台阶与缓坡可走（单步抬升 ≤.35m），更高的台基需跳上去
-    const stepOK = (x, z) => !campus.isBlocked(x, z, pos.y) && campus.groundY(x, z, pos.y) - pos.y <= .35;
-    if (stepOK(pos.x + mx, pos.z)) pos.x += mx;
-    if (stepOK(pos.x, pos.z + mz)) pos.z += mz;
+    // 奔跑撞到教室桌椅时，把整组桌子+双椅撞翻（碰撞体随即失效，可从倒下的桌面上走过）
+    const stepOK = (x, z) => {
+      if (campus.isBlocked(x, z, pos.y, PLAYER_R)) {
+        if (sprint) campus.knockAt(x, z, pos.y, mx, mz);
+        return false;
+      }
+      return campus.groundY(x, z, pos.y) - pos.y <= .35;
+    };
+    // 子步进：一帧位移拆成 ≤0.2m 的小段，低帧率时不会整段跨过薄墙或课桌
+    const n = Math.max(1, Math.ceil(Math.max(Math.abs(mx), Math.abs(mz)) / .2));
+    for (let i = 0; i < n; i++) {
+      if (stepOK(pos.x + mx / n, pos.z)) pos.x += mx / n;
+      if (stepOK(pos.x, pos.z + mz / n)) pos.z += mz / n;
+    }
     // 面朝移动方向：前进/横移按移动方向转身；S 后退保持朝向，背向退出（不转身）
-    if (f >= 0) {
-      const targetFacing = Math.atan2(camFwd.x * (f / len) + camRight.x * (r / len), camFwd.z * (f / len) + camRight.z * (r / len));
+    if (forward) {
+      const targetFacing = Math.atan2(wdx, wdz);
       let diff = targetFacing - facing;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       facing += diff * Math.min(1, dt * 14);
@@ -340,7 +385,8 @@ function updatePlayer(dt) {
   // 跳跃与落地：重力作用在 y，贴地后归零
   vy -= GRAVITY * dt;
   pos.y += vy * dt;
-  const gy = campus.groundY(pos.x, pos.z, pos.y);
+  // refY 取本帧下落前的高度：单帧下落过多时仍能认出脚下这块楼面，不会漏掉地面继续掉
+  const gy = campus.groundY(pos.x, pos.z, Math.max(pos.y, prevPos.y));
   if (pos.y <= gy) { pos.y = gy; vy = 0; onGround = true; }
   else onGround = false;
   // 相机跟随位移，保持环绕角度
@@ -349,6 +395,34 @@ function updatePlayer(dt) {
   controls.target.set(pos.x, pos.y + 1.62, pos.z);
   walkBlend += ((speed > 0 ? 1 : 0) - walkBlend) * Math.min(1, dt * 10);
   player.update(dt, speed, walkBlend > .1, env.night);
+}
+
+/* 摇杆随走动摆动：把主角这一帧的实际位移投影到相机屏幕坐标，驱动手柄偏移 */
+function updateJoyStick(dt) {
+  const p = player.group.position;
+  if (joyPrevPos.lengthSq() === 0) { joyPrevPos.copy(p); return; }
+  const dx = p.x - joyPrevPos.x, dz = p.z - joyPrevPos.z;
+  joyPrevPos.copy(p);
+  if (joyPointer !== null) return;               // 手指正在拖时不覆盖
+  const v = Math.hypot(dx, dz) / Math.max(dt, 1e-4);
+  let tx = 0, ty = 0;
+  if (v > .2) {
+    camera.getWorldDirection(camFwd); camFwd.y = 0;
+    if (camFwd.lengthSq() < 1e-6) camFwd.set(0, 0, -1);
+    camFwd.normalize();
+    camRight.crossVectors(camFwd, camera.up).normalize();
+    const f = dx * camFwd.x + dz * camFwd.z;
+    const r = dx * camRight.x + dz * camRight.z;
+    const len = Math.hypot(f, r) || 1;
+    const mag = Math.min(1, v / 7.5);            // 以奔跑速度作为手柄最大幅度
+    tx = r / len * mag;
+    ty = -f / len * mag;
+  }
+  joyKx += (tx - joyKx) * Math.min(1, dt * 7);
+  joyKy += (ty - joyKy) * Math.min(1, dt * 7);
+  const reach = joyEl.getBoundingClientRect().width * .3;
+  joyKnob.style.transform =
+    `translate(calc(-50% + ${(joyKx * reach).toFixed(1)}px), calc(-50% + ${(joyKy * reach).toFixed(1)}px))`;
 }
 
 /* 相机避让建筑、地面、树冠与边界雾墙，防止第三人称视角钻进墙里 */
@@ -413,57 +487,46 @@ addEventListener('resize', resize);
 
 /* animation */
 const clock = new THREE.Clock();
-let frames = 0;
-function animate() {
-  requestAnimationFrame(animate);
-  const rawDt = Math.min(clock.getDelta(), .25);
+let frames = 0, simT = 0;
+
+function tick(rawDt) {
   const dt = Math.min(rawDt, .06);
-  const t = clock.elapsedTime;
+  simT += rawDt;
+  const t = simT;
 
   // time transition
   if (Math.abs(state.targetTime - state.time) > .002) {
     state.time = lerp(state.time, state.targetTime, 1 - Math.exp(-rawDt * 4.2));
     env.setTime(state.time, false);
   }
-  // camera tween
-  if (!freeCam) updatePlayer(rawDt);
-  if (!freeCam) autoAlignCamera(rawDt);
+  if (!freeCam) updatePlayer(dt);
+  if (!freeCam) autoAlignCamera(dt);
   env.followCamera(camera);
   env.update(rawDt);
   campus.update(dt, t, { night: env.night, season: state.season });
+  effects.update(dt);
+  for (const n of npcs) n.update(dt, camera, env.night);
   controls.update();
-  if (!freeCam) autoLevelCamera(rawDt);
-  if (!freeCam) avoidCameraClip();
+  if (!freeCam) { autoLevelCamera(rawDt); avoidCameraClip(); }
+  updateJoyStick(dt);
   post.update(dt, { night: env.night, warmth: state.style === 'film' ? .55 : state.style === 'clear' ? -.16 : .02 });
-  post.render(dt);
+  return dt;
+}
+
+function uiUpdate() {
   labels.update(camera);
-  // compass
   const dx = camera.position.x - controls.target.x, dz = camera.position.z - controls.target.z;
   const needle = document.querySelector('#compass .needle');
   if (needle) needle.style.transform = `translateX(-50%) rotate(${Math.atan2(dx, dz)}rad)`;
   frames++;
-  if (frames === 3) {
-    $('#loading').classList.add('hidden');
-    window.__READY__ = true;
-  }
+  if (frames === 3) $('#loading').classList.add('hidden');
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = tick(Math.min(clock.getDelta(), .25));
+  post.render(dt);
+  uiUpdate();
 }
 animate();
 
-/* debug hooks */
-window.__ZH = {
-  THREE, scene, camera, renderer, controls, env, post, campus, mats, state, labels, player, spawn,
-  setTime: (t) => setTime(t, false),
-  setMode, setStyle,
-  setSeason: (s) => campus.setSeason(s),
-  setDensity: (d) => { campus.setDensity(d); campus.people.setDensity(d); },
-  setViewNow: (pos, target) => { freeCam = true; camera.position.set(...pos); controls.target.set(...target); controls.update(); },
-  follow: () => { freeCam = false; const p = player.group.position; controls.target.set(p.x, p.y + 1.62, p.z); camera.position.copy(controls.target).add(CAM_OFFSET); },
-  teleport: teleportNear,
-  pos: () => player.group.position.toArray(),
-  jump: () => { if (onGround) { vy = JUMP_V; onGround = false; } return { vy, onGround }; },
-  phys: () => ({ vy, onGround, gy: campus.groundY(player.group.position.x, player.group.position.z, player.group.position.y), y: player.group.position.y, freeCam }),
-  select: (id) => { const l = campus.landmarks.find(x => x.id === id); if (l) selectLandmark(l); },
-  switchHero,
-  hero: () => ({ idx: player.idx, ready: player.heroes.map(h => h.ready !== false) }),
-  rendererInfo: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),
-};

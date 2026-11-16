@@ -288,7 +288,7 @@ export function decorateBookBar(ctx, g, { by = .4, w = 14, d = 16, db = 13.6, bz
 
 /* ---------------- 林则徐纪念堂 ---------------- */
 
-function buildSeatedStatue(parent, mats, x, floorY, z) {
+export function buildSeatedStatue(parent, mats, x, floorY, z) {
   const M = IM();
   const g = new THREE.Group();
   g.position.set(x, floorY, z);

@@ -233,24 +233,32 @@ export function makeWaterNormal(repeat = [1, 1]) {
   const c = makeCanvas(w, h), g = c.getContext('2d');
   const img = g.createImageData(w, h);
   const rnd = mulberry32(88);
-  const field = new Float32Array(w * h);
-  for (let i = 0; i < field.length; i++) field[i] = rnd();
-  // smooth a few times
-  const sm = new Float32Array(w * h);
-  for (let pass = 0; pass < 4; pass++) {
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      let s = 0;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-        s += field[((y + dy + h) % h) * w + ((x + dx + w) % w)];
+  // 两套噪声：低频起伏（平滑 3 次）+ 高频细纹（只平滑 1 次），合成后才有可见的水面坡度
+  const base = new Float32Array(w * h);
+  const fine = new Float32Array(w * h);
+  for (let i = 0; i < base.length; i++) { base[i] = rnd(); fine[i] = rnd(); }
+  const blur = (src, passes) => {
+    const sm = new Float32Array(w * h);
+    for (let pass = 0; pass < passes; pass++) {
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        let s = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          s += src[((y + dy + h) % h) * w + ((x + dx + w) % w)];
+        }
+        sm[y * w + x] = s / 9;
       }
-      sm[y * w + x] = s / 9;
+      src.set(sm);
     }
-    field.set(sm);
-  }
+    return src;
+  };
+  const low = blur(base, 3);
+  const high = blur(fine, 1);
+  const field = new Float32Array(w * h);
+  for (let i = 0; i < field.length; i++) field[i] = low[i] * .9 + high[i] * .35;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const l = field[y * w + (x - 1 + w) % w], r = field[y * w + (x + 1) % w];
     const u = field[((y - 1 + h) % h) * w + x], d = field[((y + 1) % h) * w + x];
-    const nx = (l - r) * 3.0, ny = (u - d) * 3.0;
+    const nx = (l - r) * 12.0, ny = (u - d) * 12.0;
     const i = (y * w + x) * 4;
     img.data[i] = 128 + nx * 127;
     img.data[i + 1] = 128 + ny * 127;

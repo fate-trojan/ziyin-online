@@ -238,7 +238,7 @@ function ginkgoGeo() {
 }
 
 export class Nature {
-  constructor(scene, mats, { hill, hillHeight, dropAt, colliders, inBounds } = {}) {
+  constructor(scene, mats, { hill, hillHeight, dropAt, colliders, inBounds, riverAt } = {}) {
     this.group = new THREE.Group();
     scene.add(this.group);
     this.mats = mats;
@@ -248,6 +248,8 @@ export class Nature {
     this.colliders = colliders || [];
     // 闭环外不留任何植被：所有落点按校园边界过滤
     this.inBounds = inBounds || (() => true);
+    // 梓荫河水道内不种树/灌木（河道已下切 3m，地面开洞）
+    this.riverAt = riverAt || (() => false);
     this.season = 'summer';
     this.density = 1;
     this.types = {};
@@ -274,6 +276,8 @@ export class Nature {
     positions = positions.filter(([x, , z]) => !wuCannonSouthStrip(x, z));
     // 闭环外不种树
     positions = positions.filter(([x, , z]) => this.inBounds(x, z));
+    // 河道内及岸边 margin 内不种树：树冠不挑出水面
+    positions = positions.filter(([x, , z]) => !this.riverAt(x, z, margin));
     if (!positions.length) return;
     const trunkMesh = new THREE.InstancedMesh(geos.trunk, this.mats.bark || this.mats.woodDark, positions.length);
     const wb = whiteBase();
@@ -354,8 +358,12 @@ export class Nature {
       [-2.2, 104.4, 4.2, 112.6], // 柔石亭（朱枫故居西北侧）
       [-157, 81, -79, 112], // 蛟川书院主楼（北贴雾墙，厚 17m）+ 南侧双石阶
       [136, -47, 181, -24], // 操场北侧宿舍（梓荫山东侧，横向布置）
-      [-100, 99, -79, 118], // 蛟川东副楼（16×10，含北门门槛与南入口台阶）
-      [-157, 99, -136, 118], // 蛟川西副楼（16×10，含北门门槛与南入口台阶）
+      [-100, 99, -79, 118], // 蛟川东副楼（16×10，含北门门槛）
+      [-157, 99, -136, 118], // 蛟川西副楼（16×10，含北门门槛）
+      [-150.4, 119.9, -85.6, 130.0], // 蛟川前庭主石板带（石面上不种树）
+      [-111.4, 93.5, -84.6, 122.4], // 蛟川前庭东端石板广场
+      [-159.4, 93.5, -136.6, 122.4], // 蛟川前庭西端石板广场
+      [-136.6, 99.5, -111.4, 120.6], // 蛟川前庭中央石板（原草坪改铺）
       [-112, 146, -74, 161], // 书院办公室（南立面贴雾墙，含北入口台阶与前庭）
       [34, -19, 126, 157], // 田径场
       [44, -56, 138, -18], // 梓荫山
@@ -435,7 +443,7 @@ export class Nature {
       if (Math.hypot(x + 148, z - 118.5) < 8) continue; // 蛟川小亭周边留空
       if (Math.hypot(x + 63, z - 94) < 6.2) continue;   // 教学楼 SW 南侧六角亭周边留空
       if (Math.hypot(x + 20, z + 127) < 8) continue;   // 甜心屋咖啡（体艺馆北、2#宿舍南）
-      if (Math.hypot(x + 53.5, z + 46.8) < 6) continue; // 沁园鹅棚（走廊西侧）
+      if (Math.hypot(x + 47.5, z + 51) < 6) continue; // 鹅棚（梓荫河北岸、走廊东侧）
       if (rnd() < .55) camphor.push([x, 0, z]);
       else if (rnd() < .5) pine.push([x, 0, z]);
       else cypress.push([x, 0, z]);
@@ -630,6 +638,7 @@ export class Nature {
     for (let i = 0; i < 160; i++) {
       const x = -140 + rnd() * 370, z = -150 + rnd() * 300;
       if (!this.inBounds(x, z)) continue;
+      if (this.riverAt(x, z, 1.4)) continue; // 河道内及岸边 1.4m 内不生成灌木
       if (x > 30 && x < 132 && z > -26 && z < 162) continue;
       if (onCourt(x, z)) continue; // 塑胶球场面上不生成灌木
       if (x > -68 && x < -51 && z > -10 && z < 16) continue; // 自习室东南石桥水池：灌木不入水与驳岸
@@ -972,6 +981,7 @@ export class Nature {
       lampPole.push(tcyl(.055, .08, 4.4, lx, 2.2, lz, 8));
       lampHead.push(new THREE.SphereGeometry(.24, 10, 8).translate(lx, 4.52, lz));
       lampPole.push(tcyl(.16, .2, .22, lx, .11, lz, 8));
+      this.colliders.push({ x: lx, z: lz, hx: .17, hz: .17 }); // 灯柱脚座为实体
     }
     addMerged(this.group, stemGeos, mats.bambooStem);
     addMerged(this.group, leafGeos, mats.bambooLeaf);

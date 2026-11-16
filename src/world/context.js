@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { studyPondOutline } from './buildings.js';
+import { studyPondOutline, riverChannelOutline } from './buildings.js';
 
 /** 闭环内地面：校园草坪按边界多边形铺设；环外只有雾墙背景地面（900×900） */
 export class Context {
@@ -31,6 +31,16 @@ export class Context {
       p.closePath();
       s.holes.push(p);
     };
+    // 梓荫河：河道下切 3m，地面必须开洞，否则地面会盖住水面与河床
+    const addRiverHole = (s, dx = 0, dz = 0) => {
+      const p = new THREE.Path();
+      riverChannelOutline(3.5).forEach(([x, z], i) => {
+        const px = x - dx, py = -(z - dz);
+        if (i) p.lineTo(px, py); else p.moveTo(px, py);
+      });
+      p.closePath();
+      s.holes.push(p);
+    };
     // 雾墙外侧的背景地面
     const W = 900, D = 900;
     const bg = new THREE.Shape();
@@ -39,6 +49,7 @@ export class Context {
     // 背景地面整体平移 (29, -8)，开洞需按同一偏移换算，否则洞落在别处、沁园水面被压住
     addHole(bg, 29, -8);
     addPondHole(bg, 29, -8);
+    addRiverHole(bg, 29, -8);
     const bgGeo = new THREE.ShapeGeometry(bg, 1);
     bgGeo.rotateX(-Math.PI / 2);
     const pos = bgGeo.attributes.position, uv = bgGeo.attributes.uv;
@@ -56,6 +67,7 @@ export class Context {
     lawnShape.closePath();
     addHole(lawnShape);
     addPondHole(lawnShape);
+    addRiverHole(lawnShape);
     const lawnGeo = new THREE.ShapeGeometry(lawnShape, 1);
     lawnGeo.rotateX(-Math.PI / 2);
     const lawn = new THREE.Mesh(lawnGeo, this.mats.grass);

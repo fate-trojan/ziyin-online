@@ -143,3 +143,244 @@
 - **不修（细节级/红线外）**：t=0–29/390–419 水池假山折桥红枫与 `STUDY_POND` 一致；t=30–149 等段格栅墙/白墙门洞/白楼属材质细节；t=540–789 操场 B8 已锁定；t=790–989 教室内景属 `INTERIOR.md` 待办；t=1020–1037 背景校外高楼不建。
 - **证据**：视频帧 `screenshots/video_bv1dx_frame_000000/000160/001650/002050/002350/002920/004300/004700/006200/009960/010250.png`；同机位复拍 `screenshots/video_bv1dx_pavilion.png`、`video_bv1dx_pond_3bridges_s.png`、`video_bv1dx_pond_3bridges_side.png`、`video_bv1dx_pond_top.png`、`video_bv1dx_pond_axis_n2s.png`（北→南中轴桥）、`video_bv1dx_pond_north_end.png`（桥头绿篱缺口）。
 - **验证**：`npm run build` 通过（786ms / 1,101.85 kB / gzip 315.58）；新增六角亭碰撞、三桥走面与桥下水面碰撞均已登记。三座桥逐帧行走模拟（步距 .08m，含正反向与偏 0.55m）：全程无阻挡，单步最大抬升 0.187m（< 0.35m 上限），可正常上桥、过桥、下桥；桥面中段侧向 `|dx|≥0.8` 被栏杆碰撞命中，不会侧向落水。
+
+## 十一、2026-10-31 楼梯改 45° + 走廊遮挡（四教学楼 / 蛟川书院）
+
+- **用户指令**：楼梯全改成 45°，要求走廊看不到楼梯；范围仅限四教学楼与蛟川书院（含办公室/东西副楼）。此前 `INTERIOR.md` 记录的“走廊靠中轴端整跨开敞”（BV1Ck4y117vU 65s）在本轮被覆盖。
+- **改动**（仅 `src/world/classrooms.js`）：
+  1. `decorateNorthBlock`（NW/NE/SW/SE 共四条北条）：走廊两端楼梯间由“靠中轴端整跨开敞 + 另一端 0.9m 门”改为**两端统一砌墙 + 0.9m 门洞**（门高 2.15m，带过梁与门扇），走廊内只能看到墙和门。
+  2. `decorateNorthBlock` 楼梯：`zTop = 2.45 - FH/2`，单跑水平投影 1.725m = 半层高，踏步 10 级（踢面/踏面均 0.1725m）；多出的进深作北侧大平台。
+  3. `decorateAcademy`（蛟川主楼）：旧常量 `zPlaS=11.9 / zHalfS=7.9` 是按旧进深 73×34 写死的，主楼实际 `d=17`、`zF=6.3`，导致楼梯平台与梯段**伸出南立面 3.4m**（实测楼梯材质世界 bbox `z 99.38…103.42`，楼体仅到 `z=100`），悬在走廊上方。改按 `zF` 定为 `zPlaS = zF - 1.5 = 4.8`、`zHalfS = zPlaS - FH/2 = 3.075`，梯段全部退回楼内；首层梯井铺实防跌落。
+  4. `decorateAnnex`（办公室/东西副楼）：`zLandS = zPlatS - FH/2`，`run = 1.725m`，平台盒、`stairRun` 与中央栏杆碰撞随 `run` 自动跟随。
+- **验证**：
+  - `npm run build` 通过（697ms / 1,101.93 kB / gzip 315.56）。
+  - 剖面探针（`groundY` 按层传 `refY`）：教学楼一层 0.86→2.58（升 1.72 / 水平 1.72）；蛟川一层 6.16→7.88（升 1.72 / 水平 1.72）；办公室梯核 B 跑同为 45°；各层首层梯井均为楼面标高（已铺实）。
+  - 蛟川主楼楼梯 bbox 由 `z 99.38…103.42` 收回至 `z 94.54…96.34`，南立面无悬空楼梯。
+  - 走廊视角 `st45_teach_corridor_east/west`、`st45_academy_corridor_w/e`、`st45_teach_door`、`st45_academy_door` 只见墙/门，无楼梯；室内 `st45_teach_stair_A/A2`、`st45_academy_stair_A` 为 45° 踏步；0 控制台错误。
+  - 证据截图：`screenshots/st45_teach_corridor_east.png`、`st45_teach_corridor_west.png`、`st45_teach_door.png`、`st45_teach_stair_A.png`、`st45_teach_stair_A2.png`、`st45_teach_stair_inside.png`、`st45_teach_air.png`、`st45_academy_corridor_w.png`、`st45_academy_corridor_e.png`、`st45_academy_door.png`、`st45_academy_stair_A.png`、`st45_academy_stair_inside.png`、`st45_academy_air.png`、`st45_academy_south.png`。
+
+## 十二、2026-10-31 楼梯改 30° + 平台贴北墙 + 四教学楼端墙封实
+
+- **用户指令**：「四教学楼要求从内侧看不到，墙可以适当南延 1 米；所有楼梯中转处与北墙距离仅为楼梯宽度 1 到 1.5 倍，角度可适当调小到三四十度」；「内侧指从中轴往两边看」。
+- **改动**（仅 `src/world/classrooms.js`）：
+  1. `decorateNorthBlock` 靠中轴端山墙：原“南半面（局部 z 0…3.45）整跨开敞”改为**整面封实**（z `zN+WT…zS-WT`），仅首层南平台位置留 1.03m 入口门 + 门扇/过梁/碰撞；其余层实墙。室内端墙同步加碰撞，室外三级石阶收窄到门宽（3×0.38m）。
+  2. `decorateNorthBlock` 立面贴图开洞：整面封实，仅保留首层入口门洞（`x0:2.42, x1:zS-WT, y0:FY, y1:FY+2.2`）。
+  3. `decorateNorthBlock` 楼梯：45° → **30°**，`zTop = 2.45 - (FH/2)/tan30`（单跑水平投影 ≈2.99m），平台进深 **2.89m = 1.42×梯间宽 2.03m**（北墙距平台南沿即平台全长）。
+  4. `decorateAcademy`（蛟川主楼）：梯段**贴北墙**，`zLandN = zN1+4.4`（平台进深 4.4m = 1.47×梯间宽 3.0m），`zStairS = zLandN + (FH/2)/tan30`；南侧余 5.6m 作楼梯厅，首层梯井铺实。
+  5. `decorateAnnex`（书院办公室/东西副楼）：`run = (FH/2)/tan30 ≈ 2.99m`，平台进深 4.41m = 1.38×梯核宽 3.2m。
+- **验证**（Playwright 探针 + `campus.walkSurfaces` 逐矩形核对）：
+  - 四教学楼梯间 x `-50.33…-48.3`（宽 2.03）；中途平台 y=2.585、z `24.32…27.21`（深 2.89m，贴北墙 24.3）；A 跑 z 30.2→27.21、y 1.033→2.585，踏面 0.30/踢面 0.1725 → **30.0°**。
+  - 蛟川主楼梯间 x `-143.16…-140.16`（宽 3.0）；平台 y=4.435、z `83.3…87.7`（深 4.4m，贴北墙 83.3）；A 跑 z 90.69→87.7、y 2.882→4.435 → **30.0°**；南侧楼梯厅楼板 z `90.69…96.3`（`groundY` 已确认 2.71 连续，此前探针为空是采样方向写反）。
+  - 副楼梯核 x 宽 3.2；平台 y=4.325、z `100.8…105.21`（深 4.41m，贴北墙 100.5）→ **30°**；办公室梯核同型。
+  - 中轴双眼平视截图：四教学楼东西两栋靠中轴端均为整面墙 + 采光窗，窗后无踏步可见，首层仅 1.03m 入口门 + 收窄石阶。
+  - `npm run build` 通过（639ms）；0 页面错误。
+  - 证据截图：`screenshots/st30_teach_axis_west.png`、`st30_teach_axis_east.png`、`st30_teach_stair.png`、`st30_academy_stair.png`、`st30_annex_stair.png`、`st30_annex_air.png`。
+
+## 十三、2026-11-01 副楼与四教学楼南块：去掉南向入口门与室外台阶
+
+- **用户指令**：「去掉所有副楼南面的门和楼梯」；随后附截图「四教学楼此处的楼梯和门也去掉」。经确认，仅删除**西/东副楼与四栋教学楼南块的南向入口门及门外台阶**，室内楼梯与梯核采光窗保留。
+- **改动**：
+  1. `src/world/classrooms.js` `decorateAnnex` 新增 `entryDoor` / `entrySteps`（默认 `true`）；关闭时不生成入口立面门洞、门扇、室外台阶及其走面/侧碰撞，基座入口一侧改为整段碰撞封口，梯核上方窗起步位置顺延到原门位。
+  2. `src/world/campus.js` 蛟川东副楼、西副楼 `decorateAnnex` 传 `entryDoor: false, entrySteps: false`；北门与主楼外廊连接保留。
+  3. `src/world/classrooms.js` `decorateSouthBlock` 新增 `southDoor`（默认 `true`）；关闭时首层南墙合并为整墙 + 两侧窗（无门洞/过梁/门扇/`entranceSteps`/门侧碰撞），立面贴图同步不再挖门洞。
+  4. `src/world/campus.js` 四栋教学楼南块 `decorateSouthBlock` 传 `southDoor: false`（2×2 全组一致，南块仍可经北墙通道门进入）。
+  5. `src/world/nature.js` 树木避让区注释同步去掉“南入口台阶”。
+- **验证**：
+  - `npm run build` 通过（666ms / 1,102.84 kB / gzip 315.88）。
+  - 探针遍历场景 `M.stair`（`0xb4b1a6`）网格：副楼南侧（z>110.4）、四教学楼南块南侧（z 67…74 / 39…46）均无任何楼梯构件残留。
+  - 截图：东/西副楼南立面为连续实墙 + 窗（`ann_south_east.png`、`ann_south_west.png`、`ann_south_air.png`）；四教学楼南块南立面原门位已是实墙（`sb_door_sw_wide.png`、`sb_door_ne_wide.png`、`sb_door_air.png`）。
+
+
+## 十四、2026-11-01 楼梯间所在墙段整段去掉 + 教室去门板
+
+- **用户指令**：「把楼梯间门所在的一整面墙分段，楼梯间所在的那段去掉就行了，一共只要动四教学楼加蛟川主楼一共5面墙」；随后「所有教室保留门洞去掉门板」。
+- **改动**：
+  1. `src/world/classrooms.js` `decorateNorthBlock` 中轴端山墙：以 `zd0 = 2.42` 为界把山墙分成「带采光窗的北段」与「楼梯间南段」，南段**各层均不砌墙、不装门、不留过梁与碰撞**；立面贴图挖洞改为 `FY … FY+(floors-1)*FH+CH`（4 栋教学楼共 4 面墙）。
+  2. `decorateAcademy`（蛟川主楼）：楼梯间南墙段不再调用 `bayWall`（无墙、无门），改在立面 `holes` 中整跨 `s.x0…s.x1`、`y…y+CH` 挖通（主楼 1 面墙，含 2 处梯间）。
+  3. `doorAt` 新增 `leaf` 开关（仍画门框，`leaf:false` 只留门洞与框）；`bayWall` 透传该开关。教室门（四教学楼北条各层、南块北门、蛟川主楼各层）统一 `leaf:false`，班级通道门不变。
+- **验证**：
+  - `npm run build` 通过（685ms）。
+  - 碰撞探针（山墙 x=-48.2，z 58.7，y=1.0/4.3/7.7/11.2/13.5）全部无遮挡；`z≥59.0` 仍由南块北墙 pad 正常挡人，其余墙段照旧。
+  - 主楼南墙探针（z=100.15，y=3.0/6.4/9.8）：梯间段 x `-95.8…-92.8` 无遮挡，两侧教室墙仍挡人。
+  - 截图：`gable_open_view3.png`（山墙楼梯间段自下而上敞开、楼梯可见、其余墙段窗框完好）、`doors_sw_corridor.png`（教室门只剩门洞与框）。
+
+## 十五、2026-11-01 教室与四教学楼走廊端部一律不装门
+
+- **用户指令**：截图「挡住小人的教室门也去掉，确保所有教室没有门；四教学楼走廊两端的门去掉」。
+- **改动** `src/world/classrooms.js`：
+  1. `decorateNorthBlock` 教室走廊门：删除 `doorAt`，只留门洞与过梁（不再有门框/门扇）。
+  2. `decorateNorthBlock` 北条南墙通往南块的通道门：删除 `doorAt`，只留门洞。
+  3. `decorateSouthBlock` 教室北门：删除 `doorAt`，只留门洞与过梁。
+  4. `decorateAcademy` 教室：`bayWall` 内删除 `doorAt`（保留过梁与窗），主楼教室全部无门。
+  5. 四教学楼走廊两端通往楼梯间的 0.9m 门：删除 `doorAt`，保留洞口、墙垛与过梁碰撞。
+  6. 移除上一轮临时加入的 `doorAt` / `bayWall` 的 `leaf` 参数，恢复函数签名。
+- **保留**：南块南向教室门仍由 `southDoor:false` 关闭；副楼/办公室等非教室门未改动。
+- **验证**：
+  - `npm run build` 通过（787ms）。
+  - 首层/二层走廊截图：端部楼梯间与教室均为纯洞口，无门扇遮挡（`screenshots/nodoor_corridor_g.png`、`nodoor_corridor_l2.png`）。
+
+## 十六、2026-11-01 大成门去门槛、北侧补柱
+
+- **用户指令**：「大成门柱子下面的一个门槛去掉，北面加上和南面一样的柱子」。
+- **改动** `src/world/buildings.js` `buildDachengGate`：
+  1. 删除柱下通长石门槛 `meshBox(g, mats.stone, 10.4, .5, 1.0, 0, .6, D/2-.2)`，仅保留南侧台阶；台基面（y .34）畅通。
+  2. 红柱改为南北两面同制：`z ∈ {D/2-.45, -(D/2-.45)}`，每面 x = −4.4/−2.0/2.0/4.4，共 8 根。
+  3. `src/world/campus.js` 同步注释（原「通长门槛需跳一下」→「柱下已无通长门槛」）。
+- **验证**：
+  - `npm run build` 通过（701ms）。
+  - 通行探针：门洞中心 x=−28、z 57.5…61.0、y .35/1.2 全部 `isBlocked=false`。
+  - 截图：`screenshots/gate_south.png`（南侧无门槛、四柱完整）、`screenshots/gate_north.png`（北侧新增四柱，与南侧同制）。
+
+## 十七、2026-11-01 蛟川前庭中央草坪改石板、石面上清树
+
+- **用户指令**：「蛟川广场中心绿色区域换成四周石头材质，石头广场上不能有树」。
+- **改动**：
+  1. `src/world/campus.js` `_buildGrounds`：在两端广场与主石板带之间补铺中央石板 `path(-124, 110.25, 26, 20.5, 0, m.slab)`（x −137…−111、z 100…120.5），与四周同材质，原草坪整块覆盖。
+  2. `src/world/nature.js` 树木避让表新增 4 个矩形：主石板带（x −150.4…−85.6 / z 119.9…130）、东端广场（x −111.4…−84.6 / z 93.5…122.4）、西端广场（x −159.4…−136.6 / z 93.5…122.4）、中央石板（x −136.6…−111.4 / z 99.5…120.6），随机补植与手工点位的 `inRect` 判断同时生效；石面上的 (−141,120)、(−144,124)、(−109.6,124.9)、(−100,119.7) 等树被筛除。
+- **验证**：
+  - `npm run build` 通过（680ms）。
+  - 地面材质网格扫描（x −162…−84 / z 98…132）：原中央绿色块已全部变为石板，仅主楼台阶间的既有花池（建筑构件）保留绿色顶。
+  - 石板矩形内树木实例扫描：`[]`（无树）。
+  - 截图：`screenshots/academy_plaza_wide_after.png`（前庭全石板、无树）、`academy_center_stone.png`、`academy_plaza_wide_after2.png`。
+
+## 十八、2026-11-01 可视实体碰撞审计与补充登记
+
+- **用户指令**：「检查所有可视物体是否有相应碰撞体；规划动效方案，如人撞倒桌椅、河水流动等」。
+- **审计方法**：运行时遍历 `campus.group / nature.group / context.group / people.group` 全部 mesh 包围盒，按材质与尺寸手工归类（合并网格会把整栋楼并成一个对象，按 mesh 判定会大量误判，故以代码事实为主、运行时定点探针为辅）；反向检查全部 `colliders` 均有可见支撑物，未发现孤立碰撞体。
+- **已确认有碰撞**：建筑主体与外墙、门窗洞两侧墙垛、柱子、台阶与台基、桥体桥栏、石狮/石碑/石桌石凳、驳岸与池沿、栅栏与雾墙、内景书架/阅览桌/坐像/讲台等。
+- **本轮补齐的缺口**：
+  1. `src/world/classrooms.js`：`deskAt` / `teacherDesk` 新增可选 `cols`，把「课桌 + 双椅」登记为一个平面碰撞体（约 0.91×1.16m，`y0=y-.05`、`y1=y+1.15`）；四处调用（北条 3 教室、南块教室、蛟川主楼、书院主楼）传入 `cols`。全场景共 1172 个课桌椅碰撞体。
+  2. `src/world/campus.js` 沁园：山石按可见石体尺寸登记（`hx/hz=.8*s`）；船形盆景木盆 `hx/hz` 与盆体对齐、`y0=-1.05/y1=-.2` 只封盆体不挡上层；新增深水区碰撞（`qyOutline(-.08)` 内 1m 网格，`hx/hz=.55` 消除格间缝隙，`y1=-.72`，只在涉水高度阻挡，桥面 −.58 / 亭台 −.31 放行）。
+  3. `src/world/campus.js` `this.ctx` 增加 `colliders` 引用；`src/world/buildings.js` `buildHillStreetDetails` 为 3 个蓝釉大花盆（`hx/hz=.46`，`y0..y1` 取盆体高度）与 2 个矩形灯柱（`hx=.17/hz=.13`）登记碰撞。
+  4. `src/world/campus.js` 红廊两段红木长凳：竖段 (14.40,−9.0)/(14.40,4.1) `hx .23/hz .93`，横段 (1.1,5.0) `hx .93/hz .23`。
+  5. `src/world/nature.js`：园区白色球头灯柱 3 处（9.25,−20.1 / 9.15,2.6 / 15.8,−22.7）柱脚登记 `hx/hz=.17`。
+- **未加碰撞（依 RULES 第 9 条与设计意图）**：树干以外的树冠/灌木/草丛、旗帜、烟雾粒子、水面装饰、吊灯与吊扇（头顶净空）、人群（沿固定路径行走的环境装饰）。
+- **验证**（Playwright + `window.__ZH`，Chrome swiftshader，5174 端口）：
+  - 课桌椅：1172 个碰撞体中心 `isBlocked` 全部 `true`；教室可走面 0.3m 网格 BFS：450 个自由格全部连通（`freeReachablePct=100`），有走道但未被切断。
+  - 沁园：涉水高度 (y=−1.0) 圆池中心与水臂 `true`；桥面 (y=−.5)、亭台 (y=−.3)、岸边草地 `false`，跳跃高度 (y=−.5) 可越过浅水判定。
+  - 红廊长凳三点 `true`，廊下走道 (13.2,−9.0)/(12.0,6.4) `false`。
+  - 梓荫山花盆/灯柱五点 `true`，A 线步道 (90.1,−40.6) `false`；白球灯柱三点 `true`，旁侧 `false`。
+  - `npm run build` 通过（667ms）。
+  - 截图：`screenshots/col_classroom.png`（室内课桌椅与走道）、`col_qinyuan.png`（圆池/拱桥/亭台）、`col_redbench.png`（红廊长凳贴墙）、`col_hill.png`（蓝釉花盆与矩形灯柱贴地）。
+- **动效方案（规划，待实施）**：见对话回复中的分阶段方案（河水流动增强、可撞倒桌椅、人物动作、旗帜与烟雾整合）。
+
+
+## 十九、2026-11-01 梓荫河下切：河道深 3m、水深 1.8m、小人可落水
+
+- **用户指令**：「河道深3米，水深1.8米，人要可以落水」。
+- **改动**：
+  1. `src/world/buildings.js`：新增 `RIVER_CENTER`（8 点连续中心线：−55,−45 → −42,−45 → −39.5,−46.5 → −37,−48 → 3,−48 → 5,−49.5 → 7,−51 → 94,−57）与 `riverChannelOutline(half)`（左法线斜接外扩，尖角限幅 1.6），水面半宽 3.5m（河宽 7m）。
+  2. `src/world/context.js`：`addRiverHole` 把同一轮廓开洞到 900×900 背景地面与草坪，否则地面会盖住水面与河床；原四段水面 + 三处断口补水改为一条连续水道。
+  3. `src/world/campus.js` `_buildCreek`：河床 `ShapeGeometry` 位于 **−3.0**（`m.soil`）；一圈 0.22m 厚石砌驳岸 `ExtrudeGeometry` 自 −3.0 砌到地面 0（`m.stoneDark`，贴图按 2.2m 重复）；压顶石带（`riverChannelOutline(3.62)…(3.4)`，顶 .06）压住地面洞缘；水面 `ShapeGeometry` 位于 **−1.2**（`m.waterRiver`）→ 水深 1.8m。三座石拱桥、桥面 12 段走面与桥头 0.2m 踏步保持不变。
+  4. `src/world/campus.js` 新增 `inRiver(x,z)`（射线法，与开洞轮廓同源）；`groundY` 在河道内脚底取 `this.riverSwim = −1.35`（水面下 0.15m，即「落水游泳面」），桥面走面仍按 max + `refY` 过滤取到桥顶。
+  5. `src/world/campus.js` `_buildGrounds`：空中走廊下方的地面路被河道拦断，拆为两岸两段（z −41.4…−31、−53…−48.6）。
+  6. `src/world/materials.js`：`riverNormal` repeat 改 `.38`（水面改用 ShapeGeometry，uv 为世界米制，tile≈2.6m）。
+  7. `src/world/nature.js`：新增 `riverAt` 过滤，河道内不落乔木与随机灌木（避免悬空植被）。
+  8. `src/world/campus.js` `update`：夜间水面 `roughness = .25 − night*.04`、`metalness = .07 + night*.03`（原 −.09/+.06 会让法线贴图炸出满屏白色高光点）。
+- **验证**（Playwright + `window.__ZH`）：
+  - 河道探针：河中 4 点 `inRiver=true`、`groundY=−1.35`；桥心 (−45,−45) `3.02`；桥坡 z−42 为 `2.26`；两岸 (−48,−41.2)/(−48,−48.8) 与岸外草地均 `0`、`inRiver=false`。轮廓 `n=16`，x −55…94.24、z −60.49…−41.5。
+  - 落水：小人置于岸侧 (−48, .4, −42.2)，重力下落后 `y=−1.35`、`onGround=true`、`gy=−1.35`。
+  - 出水：由 −1.35 起跳（v=6.4、g=18）顶点 −0.21，岸顶 0，差 0.21 ≤ 0.35 的单步阈值 → 跳一下即可上岸（无需改 `stepOK`）。
+  - 水面法线：贴图梯度 mean 99.7 / max 181（不再全平），近景可见水纹；河道水面随流漂移 offset 逐帧推进。
+  - `npm run build` 通过（667ms）；临时脚本已删除。
+  - 截图：`screenshots/river3_overview.png`（水道、压顶、河壁与水面）、`river3_cross.png`（桥下横断面与桥下水中的小人）、`river3_player_in.png`（小人在水中的高度）、`river3_night3.png`（夜间水面）。
+- **待跟进**：夜间水面在低粗糙度 + 强法线时仍有明显高光噪点（已从 −.09 缓解，如需彻底消除可夜间改用独立弱法线或加高 roughness）。
+
+
+## 二十、2026-11-01 梓荫河与沁园水系连通、河道建模噪音清理
+
+- **用户指令**：「截图发现并清理整条河道上的建模噪音，沁园水系与梓荫河连接处的阻挡物去掉，看上去水面应为一体」。
+- **改动**：
+  1. `src/world/buildings.js` `RIVER_CENTER` 西端封口移到 x=−55.9（与沁园水面东缘同一经线）：河道开洞与沁园矩形开洞只共边、不重叠，避免两套地面开洞相互穿插。
+  2. `src/world/campus.js` `_buildCreek`：新增开口环带 helper `band(outer, inner, skip)`（外圈正向 + 内圈反向，跳过 skip 段，兼容 `[x,z]` 与 `{x,z}` 两种点）；河壁 `riverWallGeo`、压顶石 `riverRimGeo` 改为开口带，西端封口不再有石壁/压顶石横在水面上。
+  3. `src/world/campus.js` `_buildQinyuanScenery`：沁园水臂东延并与河道横断面完全对齐 —— `QY_ARM = { xE: −55.9, zN: −48.5, zS: −41.5 }`，`qyOutline` 重写为「圆池 45 点 + 颈西 + 水臂西北 + 水臂东南 + 颈东」（0..48 点）；水面材质由 `m.waterStill` 改为 `m.waterRiver`，高度由 −.84 改为与河道同一水位 **−1.2**。
+  4. 沁园池底下挖：盆地网格按 `qyOutline(.05)` 内部判定，逐顶点压到局部 −1.47（世界 **−1.45**），否则盆地平面（−1）会盖住降到 −1.2 的水面；池沿改用 `band(qyOutline(.5), qyOutline(−.12), 46)` 的开口环带（46→47 为水臂东切边），`position.y=−1.45`、`depth .71`，东端不再落一道石沿压在水面上。
+  5. 挡土墙缩短：东缘挡土石墙北端止于 z=−41.5（长度 15.9→9.0，中心改 −37.0），只保留 z −41.5…−32.5，连通口彻底放开。
+  6. 河道噪音清理：鹅棚由 (−53.5,−46.8)（原在河槽内）移到北岸草坪 **(−47.5,−51)**，并删除原鹅棚平台 `penDeck`（5.6×.26×1.75）与两级踏步及其 3 条 `walkSurfaces`；沁园第三株造型灌木由 (−58.6,−45.6)（水臂东延后已压水）移到岸上 (−57.4,−48.2)。
+  7. `src/world/nature.js`：`_addType` 按冠幅净距过滤河岸乔木 `positions.filter(([x,,z]) => !this.riverAt(x,z,margin))`；`_buildShrubs` 遇 `riverAt(x,z,1.4)` 跳过；随机补树的鹅棚避让圆改到 (−47.5,−51) 半径 6m。
+  8. `src/world/campus.js`：构造函数传入 `riverAt`，新增 `nearRiver(x,z,m)`（内部 + 到轮廓边线距离）与 `inQinyuWater(x,z)`；`groundY` 增加沁园池底分支（站在沁园水里脚底取 **−1.45**，与河道 `riverSwim=−1.35` 同理）。
+- **验证**（Playwright + `window.__ZH`）：
+  - 水面 mesh：河道 x[−55.9, 94.2] z[−60.5,−41.5] y 恒 −1.2；沁园 x[−70.7,−55.9] z[−48.5,−26.7] y 恒 −1.2；两者材质均为 `waterRiver`，在 x=−55.9 处共边同高 → 视觉一体。
+  - 连通探针：(−55.9,−45) `inRiver=true, groundY=−1.35, blocked=false`；(−56.5,−45)/(−56.5,−42) `inQinyuWater=true, groundY=−1.45`；原鹅棚点 (−53.5,−46.8) 现为走廊面 `y=4.36`；新鹅棚 (−47.5,−51) `y=0, blocked=false`。
+  - 植被：距河岸 2.5m 内乔木仅 1 株（cypress 83.3,−51.1，冠幅 1.4 < 距岸 1.64）；`nearRiver(1.4)` 内无实例；网格顶点 NaN 计数 0。
+  - 噪音扫描仅剩河床 `soil` 与河壁 `stone`（属正常结构）。
+  - `npm run build` 通过（640ms）；临时脚本 `scripts/_noise.mjs` 已删除。
+  - 截图：`screenshots/nz2_junction.png`、`nz2_junction_water.png`、`nz2_junction_top.png`（连接处水面同高同色、无石沿阻断）、`nz2_river_top.png`（河道俯视无挑水树冠）、`nz2_east.png`（东段）、`nz2_pen.png`（鹅棚落地）。
+- **待跟进**：消息「把梓荫河和沁园水系打通，同一成泮池水质；人落水要有交互动效」中的落水水花/涟漪尚未实施，水质统一仅做到河道与沁园同用 `waterRiver`（泮池仍为无流向的 `water`）。
+
+### 二十·补充（同日）河道「图层」清理：下水实地行走排查
+
+- **做法**：用 Playwright 把小人放到河道水面里（`y=-1.35`），沿 `RIVER_CENTER` 逐段行走、镜头贴近水面逐帧截图，并对可疑色块做射线拾取定位网格。
+- **查明的两类「图层」**：
+  1. **水面上的硬边暗色矩形**：架空走廊/桥体投在水面上的阴影（`riverWater.receiveShadow=true` 时），在透明水面上读作一块浮着的深蓝图层。
+     → 河道水面与沁园水面都改为 `receiveShadow = false`。
+  2. **岸边整条纯黑竖面**：射线拾取确认是驳岸 `ExtrudeGeometry` 环带本身（`side=DoubleSide`、`receiveShadow=true`），被走廊/桥体整体遮住后只剩极弱环境光，渲染成纯黑；换成无光照材质即恢复石色，可确认是阴影而非贴图问题。
+     → 驳岸材质由 `stoneDark` 改 `stone`，并设 `receiveShadow = false`；沁园池沿同样 `receiveShadow = false`。
+- **验证**：水下行走 6 段 + 连通口前后 + 水面内 4 点 × 8 方向环绕镜头截图，岸壁恢复浅色石砌，水面不再出现硬边暗块；`npm run build` 通过（676ms）。
+- **截图**：`screenshots/river4_walk_start.png`、`river4_walk_01…04.png`、`river4_junction_in.png`、`river4_junction_back.png`、`river4_bank_before_view.png`（修复后同机位对比）、`river4_bank_after_view.png`。
+- **仍未处理**：南岸部分桥台背光面仍偏暗（建筑/桥体自身投影，非河道专属图层）；落水水花/涟漪动效未做。
+
+
+## 二十一、2026-11-01 阶段 B：可撞倒的教室桌椅
+
+- **用户指令**：「阶段 B｜可撞倒的桌椅」；范围确认：**全部教室课桌椅**，触发条件为**按住 Shift 跑动撞到才倒**（慢走只被挡住）。
+- **改动**：
+  1. `src/world/classrooms.js`：
+     - `Batch` 新增 `units` 数组；新增 `addUnit(B, cols, x, y, z, parts, col)`：把「课桌 + 双椅」登记为一个刚体单元（`parts` 为该单元的盒子清单，`col` 为该单元自己的碰撞体并回指单元）。
+     - `deskAt` / `teacherDesk` 不再向合并网格 `B.box` 推盒体，改为收集 `parts`（课桌：桌面 / 4 桌腿 / 桌斗；双椅：各 4 椅腿 / 座 / 背；讲桌：桌面 / 柜体 / 椅座 / 椅背），并生成 `dyn: true` 的碰撞体（课桌 hx≈0.46、hz 0.58、y0 楼面−0.05、y1 楼面+1.15）。
+     - 四处内景导出统一为 `g.userData.interior = { colliders: cols, walk: walks, units: B.units }`。
+  2. `src/world/campus.js`：
+     - 构造函数新增 `dynUnits / _dynMeshes / _tipped`，在 `smoke / landmarks` 之后调用 `_buildDynFurniture()`。
+     - `_registerInterior` 把内景 units 随建筑旋转（quarterTurn）与平移世界化，碰撞体经 `colMap` 映射后打上 `dyn / off=false / unit` 回指。
+     - `_buildDynFurniture()`：按材质分组生成 3 个 `InstancedMesh`（`BoxGeometry(1,1,1)` + 每实例非均匀缩放矩阵，`DynamicDrawUsage`、cast/receiveShadow、`frustumCulled=false`）；每单元 `u.base = T(pivot)·R_y(ry)`，每部件 `local = T(offset)·S(w,h,d)` 写入实例矩阵。
+     - `knockAt(x,z,y,dx,dz)`：只取 `dyn && !off && unit && !tipped` 且 y 落在 `[y0,y1)` 的碰撞体，取最近者交给 `_knockUnit`。
+     - `_knockUnit()`：绕整组形心（半个碰撞高度）翻倒，轴 `(uz,0,-ux)`（顶端朝推撞方向），目标 90°，起始角速度 4；`c.off = true` 让碰撞立刻失效。
+     - `_updateDynFurniture(dt)`：弹簧阻尼（刚度 220、阻尼 11），到 90° 即停；再按「所有部件 8 个角点变换后的最低点贴到楼面（`tmp.elements[13] += drop`）」落稳，避免悬空或穿地。
+     - `isBlocked` / `onlyFencesBlocked` 循环开头加 `if (c.off) continue;`；`update()` 末尾调用 `_updateDynFurniture(dt)`。
+  3. `src/main.js`：`updatePlayer` 的 `stepOK` 在 `isBlocked` 且 `held.shift` 时调用 `campus.knockAt(x,z,pos.y,mx,mz)`，仍返回 `false`（本帧被挡住，下一帧起碰撞体已失效可走过倒下的桌椅）。
+- **运行时统计**（`window.__ZH`）：**1260 个单元 / 21448 个部件**；3 个实例网格 `desk 2520`、`chair 4864`、`steel 14064`；楼层分布 0.8/3.4/6.5/9.6… 等 9 层。
+- **验证**（Playwright + `window.__ZH`，headless）：
+  - 撞击链路：`knockAt(u.x,u.z,u.y+.05,1,.05)` 后 `tipped=true`、`ang=1.57`（90°）、`col.off=true`、`isBlocked(单元中心)=false`；同排再撞 2 组，三组均翻倒且无互相悬空。
+  - 键盘链路：此前一次 `Shift+W` 冲撞已实测 `tipped=true / off=true / blocked=false`（撞击入口与直接调用 `knockAt` 为同一函数）。
+  - 说明：headless 软件渲染下单帧 `rawDt` 可到 0.25s，小人会穿过 0.8m 的薄楼板（`updatePlayer` 物理用 `rawDt`），故最终截图用直接调用撞击入口；真实 60fps 下无此现象。
+  - `npm run build` 通过（657ms）；临时脚本（`_knock/_probe/_step/_dt/_rush/_shots.mjs`）已删除。
+  - 截图：`screenshots/knock_before.png`（撞击前：课桌、双椅、讲桌与黑板）、`knock_after.png`（目标组 90° 翻倒在楼面、碰撞解除）、`knock_top.png`（俯视贴地无穿地）、`knock_row.png`（同排三组翻倒）。
+- **待跟进**：翻倒后暂无二次互动（可再撞、可扶起）；如需要可加「再按 Shift 撞已倒的桌椅无效/可推走」等后续阶段。
+
+## 二十二、2026-11-02 演示剧本出片：完整无声成片 `ziyin-demo.mp4`
+
+- **用户指令**：把 12 节拍演示做成完整无声视频；特效范围含银杏飘落 + 椅子复位、鸟群飞过、鲤鱼跃起、鞠躬还礼 + 对话气泡；一键自动播放整段剧本，代码直出逐帧渲染（不录屏）。
+- **产物**：`ziyin-demo.mp4`（工程根目录，**不放进 `public/`**，避免 48MB 打进 dist）。1920×1080 / 30fps / 143.0s / 47.77MB / 2.67Mbps / H.264 High / 无音轨。
+- **11 段镜头（累计 143s）**：航拍入场 9 + 中轴泮池 13 + 大成门 9 + 大成殿 24 + 教室桌椅 11 + 操场 14 + 银杏林 12 + 沁园书吧 13 + 梓荫河 12 + 林则徐馆 12 + 梓荫阁 14。
+- **机位与走位修复**：
+  1. 梓荫河（镜头 8）：原走位末点 `x=32` 落水（`groundY(32,-56.2)=-1.35`），改末点 `x=30`（29/30/31 均 `gy=0`）；`camDolly` 推 target 会把主角甩出画面，改为按 `player.x` 偏移的侧后跟拍 `cam=(p.x-5.2, 3.1, -46.1)`、`target=(p.x+1.6, 1.05, p.z+0.2)`。
+  2. 沁园书吧（镜头 7）：原机位 `(-56.5, 4.2, -18.5)` 被墙挡住全黑，改东侧地面低机位 `(-56.2, 1.0, -24) → (-55.8, .5, -26.6)`，桥/水面/六角亭同时入画。
+  3. 林则徐馆（镜头 9）：从 3 个候选机位中选 `(89.5,4.4,-51.5) → (91.6,3.6,-52.8)`，三人同框、两条气泡可读。
+  4. 鸟群：`flyBirds` 新增 `spread` 参数，航线收紧为 `[126,10.4,-37.5] → [90,11.0,-37.5]`、`dur=8`、`spread=.4`，在梓荫阁段顶部掠过且尺寸正常。
+- **逻辑 bug（已修）**：`Director.update` 推进镜头时未重置 flags，导致同名的 `cut / bow / say` 在前一镜头置 true 后永久失效（成片里教室不切内景、沁园与林则徐气泡缺失）。修复为推进时 `this.flags = {}`。
+- **录制期缺陷（已定位并规避）**：逐帧 `step()` + `page.screenshot()` 时，含 bloom 的画面上会**隔帧出现大片纯黑矩形**（实测黑占比 0.55~0.79；直接 `renderer.render`、关 bloom、或实时 rAF 循环均正常）。录制前关闭 bloom（`post.bloom.enabled = false`）后消失；同时把 `uGrain` 压到 `0.006`（逐帧随机颗粒会把码率顶到约 40Mbps，压制后约 2.7Mbps）。
+- **录片管线**：Playwright(headless Chrome, `--use-angle=metal`) + `setManual(true)` + 每帧 `Z.step(1/30)` + `page.screenshot(jpeg q95)` 经 stdin 喂 ffmpeg（`image2pipe` → `libx264 crf23 veryfast yuv420p +faststart`）。ffmpeg 取自 `pip install --user imageio-ffmpeg`（Playwright 自带仅 vp9/webm）。渲染 4290 帧耗时 336.8s（12.74 fps）。
+- **成片验收**：
+  - `blackdetect(d=0.02, pix_th=0.12)`：0 段；另按 3fps 采样 429 帧统计，最大黑占比 0.333，矩形黑板特征帧仅 35.3~37.0s（窄竖条，殿内暗柱），无成片级黑块。
+  - 关键时间点抽帧：14.5s 泮池桥（原黑块机位已干净）、35.7s 大成殿正面、42s 殿内过门框构图、44s 殿内气泡、57.7s 课桌撞翻、59.5s 复位、67.5/68.5s 操场双气泡、84s 银杏落叶、101.6/102.5s 沁园气泡、109.3s 鲤鱼橙影、124s 林则徐三人 + 双气泡、135/137.5s 鸟群掠过、141.5s 梓荫阁三人 + 匾额。
+  - 运行时复核：教室单元 (2.41,56.55) `local=2.57` 时 `tipped:true, ang=3.14`、`local=4.4` 恢复 `ang=0`。
+- **收尾**：`scripts/_*.mjs`（含 `_video.mjs`、`_black*.mjs`、`_chk*.mjs` 等）全部删除；`public/media/` 已清空并移除；`npm run build` 通过（689ms）。
+- **已知小瑕疵**：大成殿段孔子还礼的气泡被他本人/铜像挡住，只能看到主角那一句；教室撞翻在固定机位里辨识度偏低（碰撞状态已由运行时数据确认）。
+
+## 二十三、2026-11-03 十二段成片重录：真实铜像 / 输入框逐字 / 开机页 / 空中走廊 / 沁园书吧
+
+- **用户指令**：孔子与林则徐都换成参考照片里的坐像（去掉上一轮自建的竹节铜人），站像坐像一律只做整体平移；竹节人台词改成屏幕下方输入框逐字输入；成片要体现 index.html 的 UI 并从开机页开始录；小人移动时摇杆同步摇动；补「北端折梯上空中走廊→穿廊→过红枫林」一段；过沁园小桥后走进书吧、孔子感慨「典籍浩如烟海」；其余镜头不动。追加：**输入框逐字打完 1 秒后 NPC 才弹气泡**。
+- **产物**：`ziyin-demo.mp4`（工程根目录）。1920×1080 / 30fps / **186.30s / 5589 帧 / 123.4MB / H.264 High / 无音轨**。
+- **12 段镜头（累计 186.3s，含开机页 2s + 淡出 0.5s）**：航拍入场 9 + 中轴泮池 13 + 大成门 9 + 大成殿 24 + 教室桌椅 11 + 操场 14 + 银杏林 12 + **空中走廊 30** + **沁园书吧 24** + 梓荫河 12 + 林则徐馆 12 + 梓荫阁 14。
+- **改动**：
+  1. `Npc`：有 `model` 的铜像（坐像）不建人形骨骼，`place(x,z,facing,y)` 只整体平移，鞠躬幅度 `tilt=.17`；大成殿 `kong.place(-26.4,5.6,-.25,1.6)`（坐像较宽，往东挪避免被主角和气泡挡死）、操场 `(72.5,70)`、沁园书吧 `(-86.4,-50.4)`、林则徐馆 `(94.4,-58.2)`、梓荫阁 `(109.5,-39.0)`。
+  2. `demo.js` 镜头 8（30s）：电教楼北面地坪 `(-47.96,-113)` 起，走北跑→方平台→东跑→方平台四级折梯上廊，7.6s 起小跑穿廊止于 `z=-14`，21.8s 折向 `x≈-50.4` 的红枫林空档，终点 `z≈11.6`；机位 I2 `(-47.4,2.0,-119.5)→(-48.2,3.2,-106)` 与林下 `(-46.0,1.7,16.5)→(-50.2,1.4,6.0)`。
+  3. `demo.js` 镜头 9（24s）：贴沁园门额跟进过门（`p+(0.9,2.55,4.8)` 看 `p-(0.5,-1.15,5)`），4.2s 切桥东南岸 `(-56.2,1.4,-31.8)→(-61.8,0.2,-37.9)`，8.8s 起侧后跟拍，12.6s 进书吧内固定机位 `(-84.4,2.55,-40.2)→(-84.7,1.35,-50.6)`。
+  4. 回话时序：`playerSay()` 返回逐字耗时 `len/13`；4 处 NPC 台词（大成殿 / 操场 / 沁园 / 林则徐）改为 `d.flags.reply = local + typing + 1`，打完 Input 框停 1 秒再弹气泡。
+- **验证**：
+  - 时序探针（`demo.jump(i,local)` + 读 `#sayText` 与 `.npc-bubble`）：沁园 16.5s 起打字（24 字 / 1.85s），19.2s 无气泡、19.5s 气泡；大成殿 12.5s 起（23 字），15.0s 无、15.4s 有；林则徐 6.2s 起（16 字），8.1s 无、8.5s 有。
+  - 成片抽帧：143.0s 输入框全句已打完、无气泡；143.8s 孔子气泡「典籍浩如烟海…」与输入框同屏。
+  - `blackdetect(d=0.02,pix_th=0.12)` 无黑段（0–2s 开机页为正常暗场）；ffmpeg 解码确认 `frame=5589 / 3:06.30`。
+- **录片管线（GPU 提速）**：Playwright headless Chrome + `--ignore-gpu-blocklist --use-angle=metal --enable-gpu`，`setManual(true)` + 每帧 `Z.step(1/30)` + `page.screenshot(jpeg q95)` 经 stdin 喂 ffmpeg `image2pipe -framerate 30` → `libx264 -crf 21 -preset medium -pix_fmt yuv420p -movflags +faststart`。5589 帧耗时 482s（0.086s/帧，较 SwiftShader 的 2.9s/帧快 30 倍）。
+- **收尾**：`scripts/_video.mjs`、`_probe2.mjs`、`_probe3.mjs` 已删；`npm run build` 通过（716ms）。
+- **已知瑕疵（用户确认其余镜头不改，保留）**：沁园段 7.0–8.8s 固定桥机位被拱桥拱顶挡住已下桥的主角；8.4–9.2s 走位穿过一株锥形花坛灌木（主角被树冠吞没）；梓荫河段开场约 2.5s 机位贴着石拱桥，桥面占满画面。

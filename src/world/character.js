@@ -4,17 +4,19 @@ import * as THREE from 'three';
  * 全身灰白的竹节木偶人：分段竹节四肢、木榫关节、刻线五官，右手提灯。
  * 模型朝向 +Z，脚底在 y=0，身高约 1.82m。
  */
-export function createCharacter() {
+export function createCharacter({ bronze = false, withLantern = true } = {}) {
   const group = new THREE.Group();
   const rig = new THREE.Group();
   group.add(rig);
 
-  const wood = new THREE.MeshStandardMaterial({ color: 0xd7d3ca, roughness: .88, metalness: .02 });
-  const woodDark = new THREE.MeshStandardMaterial({ color: 0xb3aea4, roughness: .9 });
-  const seam = new THREE.MeshStandardMaterial({ color: 0x8e897f, roughness: .82 });
-  const carve = new THREE.MeshStandardMaterial({ color: 0x6f6a62, roughness: .95 });
-  const eyeInk = new THREE.MeshStandardMaterial({ color: 0x3b3733, roughness: .6 });
-  const metal = new THREE.MeshStandardMaterial({ color: 0x9b978e, roughness: .5, metalness: .45 });
+  const wood = bronze
+    ? new THREE.MeshStandardMaterial({ color: 0x7c8a6d, roughness: .58, metalness: .55 })
+    : new THREE.MeshStandardMaterial({ color: 0xd7d3ca, roughness: .88, metalness: .02 });
+  const woodDark = new THREE.MeshStandardMaterial({ color: bronze ? 0x5f6b52 : 0xb3aea4, roughness: bronze ? .62 : .9, metalness: bronze ? .6 : 0 });
+  const seam = new THREE.MeshStandardMaterial({ color: bronze ? 0x4a5340 : 0x8e897f, roughness: .82 });
+  const carve = new THREE.MeshStandardMaterial({ color: bronze ? 0x3a4231 : 0x6f6a62, roughness: .95 });
+  const eyeInk = new THREE.MeshStandardMaterial({ color: bronze ? 0x272c20 : 0x3b3733, roughness: .6 });
+  const metal = new THREE.MeshStandardMaterial({ color: bronze ? 0x5e684f : 0x9b978e, roughness: .5, metalness: .45 });
   const lampMat = new THREE.MeshStandardMaterial({ color: 0xffd79a, emissive: 0xffa64d, emissiveIntensity: 1.6, roughness: .35 });
 
   const add = (parent, geo, mat, x, y, z) => {
@@ -133,6 +135,7 @@ export function createCharacter() {
   lampLight.position.y = -.13;
   lantern.add(lampLight);
   armR.add(lantern);
+  if (!withLantern) lantern.visible = false;
 
   // 影子贴片，避免小人悬空时缺少落地感
   const shadow = new THREE.Mesh(

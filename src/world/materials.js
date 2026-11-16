@@ -110,6 +110,9 @@ export function createMaterials() {
   const pathTex = makePathTexture([1, 1]);
   const asphaltTex = makeAsphaltTexture([8, 8]);
   const waterNormal = makeWaterNormal([3, 1.4]);
+  // 河道（梓荫河）：水面与河床用 ShapeGeometry，uv 为世界米制，repeat .38 → tile ≈2.6m
+  const riverNormal = makeWaterNormal([.38, .38]);
+  const stillNormal = makeWaterNormal([.12, .12]);
   const leafTex = makeLeafTexture('#ffffff');
   const weatheredRoofTex = makeWeatheredRoofTexture();
   const stonePanelTex = makeStonePanelTexture();
@@ -130,6 +133,24 @@ export function createMaterials() {
   const shrineTex = makeLatticeTexture({ bg: '#d9c9a6', line: '#6d4b2c', cols: 3, rows: 10, border: false });
 
   const standard = (opts) => new THREE.MeshStandardMaterial(opts);
+
+  /* 水面双层法线：第二层按不同缩放取同一法线贴图，与主层错速漂移，形成细碎水纹 */
+  const addFlowNormals = (mat, layer, strength) => {
+    mat.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        #if defined( USE_NORMALMAP_TANGENTSPACE )
+          {
+            vec3 n2 = texture2D( normalMap, vNormalMapUv * ${layer.toFixed(2)} + vec2( .37, .21 ) ).xyz * 2.0 - 1.0;
+            n2.xy *= normalScale;
+            normal = normalize( normal + normalize( tbn * n2 ) * ${strength.toFixed(2)} );
+          }
+        #endif`
+      );
+    };
+    mat.customProgramCacheKey = () => `waterflow_${layer}_${strength}`;
+  };
 
   const m = {
     roof: standard({ map: roofTex.map, bumpMap: roofTex.bump, bumpScale: 0.45, color: 0xffffff, roughness: 0.86, metalness: 0.04, side: THREE.DoubleSide }),
@@ -200,6 +221,16 @@ export function createMaterials() {
     trackLine: standard({ color: 0xe9e3d2, roughness: .85 }),   // 受光：夜间不再自发光
     infield: standard({ color: 0x5f7b46, roughness: 1.0 }),
     water: standard({ color: 0x2f86b4, roughness: 0.34, metalness: 0.06, transparent: true, opacity: 0.9 }),
+    // 梓荫河：顺流水面（法线双层，roughness/metalness 夜间由 campus.update 微调）
+    waterRiver: standard({
+      color: 0x2f86b4, roughness: 0.25, metalness: 0.07, transparent: true, opacity: 0.93,
+      normalMap: riverNormal, normalScale: new THREE.Vector2(.34, .34),
+    }),
+    // 沁园静水：极缓波纹，比河道明显更静
+    waterStill: standard({
+      color: 0x2f86b4, roughness: 0.32, metalness: 0.06, transparent: true, opacity: 0.9,
+      normalMap: stillNormal, normalScale: new THREE.Vector2(.18, .18),
+    }),
     waterEdge: standard({ color: 0x5a5b52, roughness: 0.9 }),
     soil: standard({ color: 0x6b5a44, roughness: 1.0 }),
     rock: standard({ color: 0x77766b, roughness: 0.95 }),
@@ -214,6 +245,8 @@ export function createMaterials() {
     leaf: standard({ map: leafTex, color: 0xffffff, roughness: 0.8, transparent: true, alphaTest: 0.35, side: THREE.DoubleSide }),
     glowTex,
     waterNormal,
+    riverNormal,
+    stillNormal,
     stoneTex,
     plasterTex,
     stonePanelTex,
@@ -222,6 +255,8 @@ export function createMaterials() {
   m.latticeEmissive.userData.baseEmissive = 0.85;
   m.windowGlow.userData.baseEmissive = 2.4;
   m.waterNormal = waterNormal;
+  addFlowNormals(m.waterRiver, .58, .42);
+  addFlowNormals(m.waterStill, .66, .22);
   // signs / plaques
   m.plaques = {
     school: textTexture('数字校园', { w: 1024, h: 220, bg: '#202322', color: '#d9b46a', font: 'bold 104px "Songti SC","STSong",serif', letterSpacing: 12 }),

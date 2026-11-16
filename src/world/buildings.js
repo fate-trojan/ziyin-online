@@ -218,6 +218,38 @@ function makeLion(mats) {
 }
 
 // ------------------------------------------------------------------
+/**
+ * 孔子坐像（底座 + 盘膝像 + 冠/光背）。殿内祭坛与剧本里的铜像共用同一模型，
+ * 铜像只做整体平移，所以这里必须是独立 Group，不能把位置写死在祭坛坐标里。
+ */
+export function buildKongziStatue(mats) {
+  const st = new THREE.Group();
+  const put = (mesh, y, z = 0) => { mesh.position.set(0, y, z); mesh.castShadow = true; st.add(mesh); return mesh; };
+  put(new THREE.Mesh(new THREE.BoxGeometry(3.8, .35, 2.3), mats.woodDark), .175);
+  put(new THREE.Mesh(new THREE.BoxGeometry(2.6, .6, 1.6), mats.bronze), .65, .18);   // 盘膝
+  put(new THREE.Mesh(new THREE.CylinderGeometry(.6, 1.1, 1.3, 12), mats.bronze), 1.6);
+  put(new THREE.Mesh(new THREE.CylinderGeometry(.5, .68, .9, 12), mats.bronze), 2.7);
+  const shoulders = put(new THREE.Mesh(new THREE.SphereGeometry(.5, 12, 9), mats.bronze), 3.12);
+  shoulders.scale.set(1.3, .55, .85);
+  put(new THREE.Mesh(new THREE.SphereGeometry(.42, 12, 9), mats.bronze), 3.65, .05);
+  put(new THREE.Mesh(new THREE.CylinderGeometry(.2, .24, .3, 10), mats.bronze), 3.32);
+  put(new THREE.Mesh(new THREE.CylinderGeometry(.43, .46, .25, 10), mats.bronze), 3.95);
+  put(new THREE.Mesh(new THREE.BoxGeometry(1.15, .08, .78), mats.bronze), 4.12);
+  const crown = put(new THREE.Mesh(new THREE.BoxGeometry(1.27, .03, .9), mats.gold), 4.17);
+  crown.castShadow = false;
+  const halo = put(new THREE.Mesh(new THREE.TorusGeometry(.7, .05, 6, 24), mats.goldDim), 3.7, -.3);
+  halo.castShadow = false;
+  const sash = put(new THREE.Mesh(new THREE.BoxGeometry(.72, .12, .08), mats.gold), 2.55, .56);
+  sash.castShadow = false;
+  addMerged(st, [tbox(.2, 1.9, .24, -.62, 2.05, .3, 0, -.3, -.08), tbox(.2, 1.9, .24, .62, 2.05, .3, 0, -.3, .08)], mats.bronze);
+  for (const x of [-.62, .62]) {
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(.16, 8, 6), mats.bronze);
+    hand.position.set(x, 1.12, .64); st.add(hand);
+  }
+  return st;
+}
+
+// ------------------------------------------------------------------
 /** 大成殿室内：参考视频中的祭坛居中、两壁圣迹图、蓝白天花、壁灯与长凳的布局，细节作简化 */
 function buildDachengInterior(g, mats, nightEmitters, nightLights) {
   const bodyW = 30, bodyD = 20, floorY = 1.3, wallH = 7.6;
@@ -322,30 +354,8 @@ function buildDachengInterior(g, mats, nightEmitters, nightLights) {
   glow.position.set(0, altarY + 2.45, -9.3); altar.add(glow);
 
   // 孔子坐像
-  const st = new THREE.Group();
+  const st = buildKongziStatue(mats);
   st.position.set(0, altarY, -7.6);
-  const put = (mesh, y, z = 0) => { mesh.position.set(0, y, z); mesh.castShadow = true; st.add(mesh); return mesh; };
-  put(new THREE.Mesh(new THREE.BoxGeometry(3.8, .35, 2.3), mats.woodDark), .175);
-  put(new THREE.Mesh(new THREE.BoxGeometry(2.6, .6, 1.6), mats.bronze), .65, .18);   // 盘膝
-  put(new THREE.Mesh(new THREE.CylinderGeometry(.6, 1.1, 1.3, 12), mats.bronze), 1.6);
-  put(new THREE.Mesh(new THREE.CylinderGeometry(.5, .68, .9, 12), mats.bronze), 2.7);
-  const shoulders = put(new THREE.Mesh(new THREE.SphereGeometry(.5, 12, 9), mats.bronze), 3.12);
-  shoulders.scale.set(1.3, .55, .85);
-  put(new THREE.Mesh(new THREE.SphereGeometry(.42, 12, 9), mats.bronze), 3.65, .05);
-  put(new THREE.Mesh(new THREE.CylinderGeometry(.2, .24, .3, 10), mats.bronze), 3.32);
-  put(new THREE.Mesh(new THREE.CylinderGeometry(.43, .46, .25, 10), mats.bronze), 3.95);
-  put(new THREE.Mesh(new THREE.BoxGeometry(1.15, .08, .78), mats.bronze), 4.12);
-  const crown = put(new THREE.Mesh(new THREE.BoxGeometry(1.27, .03, .9), mats.gold), 4.17);
-  crown.castShadow = false;
-  const halo = put(new THREE.Mesh(new THREE.TorusGeometry(.7, .05, 6, 24), mats.goldDim), 3.7, -.3);
-  halo.castShadow = false;
-  const sash = put(new THREE.Mesh(new THREE.BoxGeometry(.72, .12, .08), mats.gold), 2.55, .56);
-  sash.castShadow = false;
-  addMerged(st, [tbox(.2, 1.9, .24, -.62, 2.05, .3, 0, -.3, -.08), tbox(.2, 1.9, .24, .62, 2.05, .3, 0, -.3, .08)], mats.bronze);
-  for (const x of [-.62, .62]) {
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(.16, 8, 6), mats.bronze);
-    hand.position.set(x, 1.12, .64); st.add(hand);
-  }
   altar.add(st);
 
   // 四配神位
@@ -698,6 +708,44 @@ export function studyPondOutline(k = 1, n = 64) {
     o.push([P.x + Math.cos(a) * P.rx * k * studyPondWob(a), P.z + Math.sin(a) * P.rz * k * studyPondWob(a)]);
   }
   return o;
+}
+
+/**
+ * 梓荫河水道中心线（世界坐标）：四段河道 + 三处斜接过渡点连成的连续折线。
+ * 水面半宽 3.5m（实景河宽 7m）。河道下切 3m，水面在 −1.2（水深 1.8m）。
+ */
+export const RIVER_CENTER = [
+  // 西端封口与沁园水面东缘同一经线（−55.9）：两处地面开洞只共边、不重叠，
+  // 河道水面与沁园水臂在 x=−55.9 处正值同一水位，视觉上连成一片
+  [-55.9, -45], [-42, -45], [-39.5, -46.5], [-37, -48],
+  [3, -48], [5, -49.5], [7, -51], [94, -57],
+];
+/** 河道轮廓点列（含斜接外扩）：地表开洞、河床、驳岸、水面共用同一轮廓 */
+export function riverChannelOutline(half = 3.5) {
+  const P = RIVER_CENTER, n = P.length;
+  const segN = [];
+  for (let i = 0; i < n - 1; i++) {
+    const dx = P[i + 1][0] - P[i][0], dz = P[i + 1][1] - P[i][1];
+    const l = Math.hypot(dx, dz) || 1;
+    segN.push([-dz / l, dx / l]);   // 左法线
+  }
+  const at = (i, s) => {
+    let nx, nz, k = 1;
+    if (i === 0) [nx, nz] = segN[0];
+    else if (i === n - 1) [nx, nz] = segN[segN.length - 1];
+    else {
+      const a = segN[i - 1], b = segN[i];
+      nx = a[0] + b[0]; nz = a[1] + b[1];
+      const ml = Math.hypot(nx, nz) || 1;
+      nx /= ml; nz /= ml;
+      const dot = a[0] * b[0] + a[1] * b[1];
+      k = Math.min(1.6, 1 / Math.max(.55, Math.sqrt((1 + dot) / 2))); // 斜接外扩，尖角限幅
+    }
+    return [P[i][0] + nx * half * k * s, P[i][1] + nz * half * k * s];
+  };
+  const left = [], right = [];
+  for (let i = 0; i < n; i++) { left.push(at(i, 1)); right.push(at(i, -1)); }
+  return left.concat(right.reverse());
 }
 
 /**
@@ -1154,9 +1202,11 @@ export function buildZiyinHill(ctx) {
   const colors = [];
   const col = new THREE.Color();
   const rnd = mulberry32(21);
+  // 山体矩形北缘(z=-55)会伸进梓荫河（x 7…94 段南/北岸即两条一次函数），河内顶点压到河床以下，避免草皮盖住水面
+  const bankS = (x) => -0.06897 * x - 47.026, bankN = (x) => -0.06897 * x - 54.009;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i) + HILL_CX, z = pos.getZ(i) + HILL_CZ;
-    const y = hillHeightAt(x, z);
+    const y = x < 94.24 && z < bankS(x) && z > bankN(x) ? -3.2 : hillHeightAt(x, z);
     pos.setY(i, y);
     const slope = Math.min(1, y / 10);
     col.setHSL(.23 + rnd() * .05, .20 + slope * .10, .34 + slope * .10 + rnd() * .03);
@@ -1718,6 +1768,8 @@ export function buildHillStreetDetails(ctx) {
       leaf.rotation.set(Math.cos(a) * .5, 0, -Math.sin(a) * .5);
       leaf.castShadow = true; group.add(leaf);
     }
+    // 花盆盆体为实体（叶簇不挡路）
+    ctx.colliders.push({ x, z, hx: .46, hz: .46, y0: y, y1: y + .84 });
   }
   // 矩形灯柱
   for (const [x, z] of [[88.4, -39.2], [95.6, -36.8]]) {
@@ -1728,6 +1780,8 @@ export function buildHillStreetDetails(ctx) {
     panel.position.set(x, y + 2.2, z); panel.userData.baseEmissive = 1.6;
     group.add(panel);
     ctx.nightEmitters.push(panel);
+    // 灯柱柱身为实体
+    ctx.colliders.push({ x, z, hx: .17, hz: .13, y0: y, y1: y + 2.92 });
   }
 }
 
@@ -2361,7 +2415,7 @@ export function buildFudeWestCourt(ctx, opts = {}) {
   meshBox(g, mats.woodDark, .34, .16, 2.3, 0, 2.5, .1);
   // 富的廊门楼（BV1wA4m157LX 15–16s）：独立于白墙，位于廊道西口台阶前、面向西，额「富的廊」，双狮夹门
   const gate = new THREE.Group();
-  gate.position.set(-.1, 0, 9.1);
+  gate.position.set(-.1, 0, 5.9);
   for (const s of [-1, 1]) meshBox(gate, mats.plaster, .7, 3.0, .9, 0, 1.5, s * 1.3);
   meshBox(gate, mats.plaster, .7, .62, 2.6, 0, 2.71, 0);   // 门楣白墙
   meshBox(gate, mats.stoneDark, 1.0, .12, 1.6, 0, .06, 0); // 门槛石
@@ -2409,8 +2463,8 @@ export function buildFudeWestCourt(ctx, opts = {}) {
     }
   }
   // 石狮一对：置于富的廊门楼外，夹护门洞（视频 15–16s 双狮守门，面朝西）
-  buildStoneLion(g, mats, -1.0, 7.7, -Math.PI / 2);
-  buildStoneLion(g, mats, -1.0, 10.5, -Math.PI / 2);
+  buildStoneLion(g, mats, -1.0, 4.5, -Math.PI / 2);
+  buildStoneLion(g, mats, -1.0, 7.3, -Math.PI / 2);
   g.position.set(x, 0, z);
   group.add(g);
   return g;
@@ -3846,9 +3900,11 @@ export function buildDachengGate(ctx) {
     const ol = addInteriorLight(g, mats, s * 8.3, 2.5, 0, 8, 12);
     nightLights.push(ol);
   }
-  // red columns flanking central opening
+  // red columns flanking central opening（南北两面同制，共 8 根）
   const cols = [];
-  for (const x of [-4.4, -2.0, 2.0, 4.4]) cols.push(tcyl(.26, .3, 4.9, x, 2.65, D / 2 - .45, 10));
+  for (const z of [D / 2 - .45, -(D / 2 - .45)]) {
+    for (const x of [-4.4, -2.0, 2.0, 4.4]) cols.push(tcyl(.26, .3, 4.9, x, 2.65, z, 10));
+  }
   addMerged(g, cols, mats.redColumn);
   // central red lintel
   meshBox(g, mats.redBeam, 9.2, .55, .55, 0, 5.05, D / 2 - .25);
@@ -3856,8 +3912,7 @@ export function buildDachengGate(ctx) {
   const roof = hipRoofGroup({ W: 24.5, D: 9.4, H: 3.1, tileMat: mats.roof, ridgeMat: mats.ridge, fasciaMat: mats.redDark, ridgeRatio: .4, cornerLift: 1.0 });
   roof.position.y = 5.35; g.add(roof);
   addPlaque(g, mats, mats.plaques.dachengmen, 0, 5.15, D / 2 + .16, { w: 4.2, h: .9 });
-  // 门槛/台阶
-  meshBox(g, mats.stone, 10.4, .5, 1.0, 0, .6, D / 2 - .2);
+  // 台阶（柱下不再设通长门槛，2026-11-01 用户指令）
   addSteps(g, mats.stone, 0, D / 2 + 1.0, 6.4, .35, 1.4, 3);
   const li = addInteriorLight(g, mats, 0, 3.4, 1, 16, 24);
   nightLights.push(li);

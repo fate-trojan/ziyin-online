@@ -6,7 +6,7 @@ import {
   buildHillPlatform, buildHillStairB, buildCornerSquarePavilion, buildFenceRun,
   buildQinyuanGate, buildQinyuanPavilion, buildYuGongPavilion, buildGoosePen, buildSweetCafe,
   buildStudyRoom, buildBookBar, buildRoushiPavilion, buildFudeWestCourt, buildHexPavilion,
-  buildRoushiNorthCourt, buildStudyPond, ROUSHI_COURT_COLLIDERS
+  buildRoushiNorthCourt, buildStudyPond, ROUSHI_COURT_COLLIDERS, riverChannelOutline
 } from './buildings.js';
 import { addStele, makeGlowSprite, addLantern, addMerged } from './detail.js';
 import { decorateNorthBlock, decorateSouthBlock, decorateAcademy, decorateAnnex } from './classrooms.js';
@@ -127,11 +127,18 @@ export class Campus {
     this.nightLights = [];
     this.colliders = [];
     this.walkSurfaces = [];
+    // 可撞倒的教室桌椅（课桌+双椅为一刚体单元，_registerInterior 收集世界坐标后烘成实例网格）
+    this.dynUnits = [];
+    this._dynMeshes = [];
+    this._tipped = [];
     this.fogSegments = [];
     this.fenceSegments = [];
     this.boundary = null;
     this.clockHands = [];
-    this.ctx = { group: this.group, mats, nightEmitters: this.nightEmitters, nightLights: this.nightLights, fences: this.fenceSegments };
+    // 梓荫河水道轮廓（_buildCreek 填充）：地面开洞、河床、驳岸与水面共用
+    this.riverPoly = null;
+    this.riverSwim = -1.35;   // 落水后脚底所在高度（水面 −1.2 之下 0.15m，可跳上岸）
+    this.ctx = { group: this.group, mats, nightEmitters: this.nightEmitters, nightLights: this.nightLights, fences: this.fenceSegments, colliders: this.colliders };
     this._buildGrounds();
     this._buildQinyuanBasin();
     this._buildQinyuanScenery();
@@ -148,6 +155,7 @@ export class Campus {
       dropAt: (x, z) => this._qinyuDrop(x, z),
       colliders: this.colliders,
       inBounds: (x, z) => this.inBounds(x, z),
+      riverAt: (x, z, m) => this.nearRiver(x, z, m),
     });
     this.people = new People(scene, mats, 72);
     this.nature.setSeason('summer');
@@ -160,6 +168,7 @@ export class Campus {
     for (const c of ROUSHI_COURT_COLLIDERS) this.colliders.push({ ...c });
     this.smoke = this._buildSmoke();
     this.landmarks = this._landmarks();
+    this._buildDynFurniture();
     this._time = 0;
   }
 
@@ -217,14 +226,17 @@ export class Campus {
     path(-66.2, -40.6, 6.8, 2.4, 0, m.roadStone, -.945);  // 亭北石阶 → 拱桥西端（北岸园路）
     // 广场 / 体艺馆前广场
     path(28, -61, 74, 7);
-    // 沁园与空中走廊一带
-    path(-54, -42, 4, 22);
+    // 沁园与空中走廊一带（梓荫河把这条走廊下的地面路拦腰截断，两岸各留一段）
+    path(-54, -36.2, 4, 10.4);
+    path(-54, -50.8, 4, 4.4);
     // 北区宿舍道路
     path(-20, -140, 116, 5);
     // 蛟川书院前庭：教学楼与办公楼之间的大面积白石板广场（47.09 实景，避开建筑体）
     path(-118, 125, 64, 9, 0, m.slab);        // 主楼←办公楼之间的主广场带
     path(-98, 108, 26, 28, 0, m.slab);        // 主楼东侧端头广场
     path(-148, 108, 22, 28, 0, m.slab);       // 主楼西侧端头广场
+    // 前庭中央原草坪改为与四周同材质石板（2026-11-01 用户指令：中心绿色换成石头）
+    path(-124, 110.25, 26, 20.5, 0, m.slab);
     for (const co of [[-150, 97], [-86, 97], [-150, 150], [-86, 150]]) {
       const b = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), m.slab);
       b.rotation.x = -Math.PI / 2; b.position.set(co[0], .045, co[1]); b.receiveShadow = true; this.group.add(b);
@@ -265,9 +277,12 @@ export class Campus {
     basin.position.set(cx, .02, cz);
     basin.receiveShadow = true;
     this.group.add(basin);
-    // 东缘挡土石墙：空中走廊西柱廊下方，从盆地底砌至地面；北端止于鹅棚北缘，留出踏步开口
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(.35, 1.1, 15.9), this.mats.stone);
-    wall.position.set(-55.95, -.5, -40.45);
+    // 供 _buildCreek 按沁园水面轮廓把池底下沉（水面降到与梓荫河同一水位后，池底需低于水面）
+    this._qinyuBasin = { mesh: basin, cx, cz };
+    // 东缘挡土石墙：空中走廊西柱廊下方，从盆地底砌至地面。
+    // 北端止于 z=−41.5：这一段（−48.5…−41.5）是沁园水臂与梓荫河的连通口，不得留墙阻水
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(.35, 1.1, 9.0), this.mats.stone);
+    wall.position.set(-55.95, -.5, -37.0);
     wall.castShadow = true; wall.receiveShadow = true;
     this.group.add(wall);
   }
@@ -294,6 +309,8 @@ export class Campus {
     const rocks = new THREE.Mesh(mergeGeometriesSafe(rockGeos), m.rock);
     rocks.castShadow = true; rocks.receiveShadow = true;
     qy.add(rocks);
+    // 山石为实体（石必硬）：与可见石体尺寸对齐
+    for (const [rx, rz, s] of spots) this.colliders.push({ x: rx, z: rz, hx: .8 * s, hz: .8 * s });
     // 船形盆景：木盆 + 倾斜扭曲主干 + 云片状树冠
     const foliage = new THREE.MeshStandardMaterial({ color: 0x6c9642, roughness: .88 });
     const barkMat = new THREE.MeshStandardMaterial({ color: 0x5d4632, roughness: .95 });
@@ -321,8 +338,14 @@ export class Campus {
     };
     penjing(-66.9, -45.0, 2.8, 1.15);
     penjing(-64.8, -44.6, 2.2, .82);
+    // 船形盆景木盆为实体（仅限盆体高度，不挡上层通行）
+    this.colliders.push(
+      { x: -66.9, z: -45.0, hx: 1.46, hz: .55, y0: -1.05, y1: -.2 },
+      { x: -64.8, z: -44.6, hx: 1.16, hz: .55, y0: -1.05, y1: -.2 },
+    );
     // 修剪成圆锥的造型灌木
-    for (const [sx, sz, r, h] of [[-69.9, -44.6, 1.1, 2.5], [-63.0, -45.7, .8, 1.7], [-58.6, -45.6, .9, 2.0]]) {
+    // 第三株原在 (−58.6,−45.6)：水臂东延后已压到水面，北移到岸上
+    for (const [sx, sz, r, h] of [[-69.9, -44.6, 1.1, 2.5], [-63.0, -45.7, .8, 1.7], [-57.4, -48.2, .9, 2.0]]) {
       const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h, 9), foliage);
       cone.position.set(sx, h / 2, sz); cone.castShadow = true; qy.add(cone);
     }
@@ -330,40 +353,69 @@ export class Campus {
 
   _buildCreek() {
     const m = this.mats;
-    const W = 7;
-    const addWater = (x, z, w, d, ry) => {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, .04, d), m.water);
-      mesh.position.set(x, .12, z);
-      mesh.rotation.y = ry;
-      mesh.receiveShadow = true;
-      this.group.add(mesh);
+    // 梓荫河：河道下切 3m（地面 0 → 河床 −3.0），水面 −1.2，水深 1.8m，小人可落水。
+    // 地面/草坪的开洞（context.js）与本处河床/驳岸/水面共用同一轮廓。
+    const RIVER_BED = -3.0, RIVER_SURF = -1.2, HALF = 3.5;
+    const outline = riverChannelOutline(HALF);
+    this.riverPoly = outline;
+    const shapeOf = (pts) => {
+      const s = new THREE.Shape();
+      pts.forEach(([x, z], i) => (i ? s.lineTo(x, -z) : s.moveTo(x, -z)));
+      s.closePath();
+      return s;
     };
-    // 梓荫河两侧不设驳岸与防护（河岸与地面平接，只有水面）
-    // 梓荫河：四段窄水道，东西向，段间留石板空隙
-    const segs = [
-      [-55, -42, -45, -45],
-      [-37, -22, -48, -48],
-      [-14, 3, -48, -48],
-      [7, 94, -51, -57],
-    ];
-    for (const [x0, x1, z0, z1] of segs) {
-      const dx = x1 - x0, dz = z1 - z0;
-      const len = Math.hypot(dx, dz);
-      const ang = Math.atan2(dx, dz);
-      const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
-      addWater(mx, mz, W, len, ang);
-    }
-    // 河面连续：补上断口（与两侧水面端头齐平；斜接段略低 5mm，避免共面闪烁）
-    const fillWater = (x, z, w, d, ry, y) => {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, .04, d), m.water);
-      mesh.position.set(x, y, z);
-      mesh.rotation.y = ry;
-      mesh.receiveShadow = true;
-      this.group.add(mesh);
+    const ring = (outer, inner) => {
+      const s = shapeOf(outer);
+      const p = new THREE.Path();
+      inner.forEach(([x, z], i) => (i ? p.lineTo(x, -z) : p.moveTo(x, -z)));
+      p.closePath();
+      s.holes.push(p);
+      return s;
     };
-    fillWater(-39.5, -46.5, 7, 5.83, Math.atan2(5, -3), .115); // 第 1、2 段之间
-    fillWater(-18, -48, 7, 8, Math.PI / 2, .12);              // 第 2、3 段之间
-    fillWater(5, -49.5, 7, 5, Math.atan2(4, -3), .115);       // 图一断口：第 3、4 段之间
+    // 开口环带：外圈正向 + 内圈反向，跳过 skip 段（skip=-1 跳隐含封口段）→ 该处不透石壁
+    // 注意：细长的满圈环带不能用它（earcut 会三角化失效），见下方驳岸
+    const band = (outer, inner, skip = -1) => {
+      const arr = (p) => (Array.isArray(p) ? p : [p.x, p.z]);
+      const o = skip < 0 ? outer : outer.slice(skip + 1).concat(outer.slice(0, skip + 1));
+      const i = skip < 0 ? inner : inner.slice(skip + 1).concat(inner.slice(0, skip + 1));
+      return shapeOf(o.concat(i.slice().reverse()).map(arr));
+    };
+    // 砌体贴图按世界米制 uv 缩放，避免长条河道把石纹拉成整块
+    const tileMat = (base, tile) => {
+      const mat = base.clone();
+      if (mat.map) {
+        mat.map = mat.map.clone();
+        mat.map.repeat.set(1 / tile, 1 / tile);
+        mat.map.needsUpdate = true;
+      }
+      mat.side = THREE.DoubleSide;
+      return mat;
+    };
+    // 河床
+    const riverBedGeo = new THREE.ShapeGeometry(shapeOf(outline));
+    riverBedGeo.rotateX(-Math.PI / 2);
+    const riverBed = new THREE.Mesh(riverBedGeo, m.soil);
+    riverBed.position.y = RIVER_BED; riverBed.receiveShadow = true; this.group.add(riverBed);
+    // 驳岸：沿轮廓一圈 0.22m 厚石壁，自河床砌到地面。
+    // 必须用 ring()（外轮廓 + hole）而不是把内外圈拼成单条轮廓：单条细长轮廓在 earcut
+    // 里会三角化失效，顶面整片盖住河面（东段尤甚）。
+    const riverWallGeo = new THREE.ExtrudeGeometry(ring(outline, riverChannelOutline(HALF - .22)), { depth: -RIVER_BED, bevelEnabled: false });
+    riverWallGeo.rotateX(-Math.PI / 2);
+    // 河壁用浅色石砌（原 stoneDark 在架空走廊的阴影里近乎全黑，读作贴在岸边的一条黑图层）
+    const riverWall = new THREE.Mesh(riverWallGeo, tileMat(m.stone, 2.2));
+    // 河壁不接收阴影：双面环带被走廊/桥体整体遮住后只剩极弱环境光，会渲染成一条纯黑竖面
+    riverWall.position.y = RIVER_BED; riverWall.receiveShadow = false; this.group.add(riverWall);
+    // 压顶石：略压住地面洞缘，遮住草坪与河壁的接缝
+    const riverRimGeo = new THREE.ExtrudeGeometry(ring(riverChannelOutline(HALF + .12), riverChannelOutline(HALF - .1)), { depth: .09, bevelEnabled: false });
+    riverRimGeo.rotateX(-Math.PI / 2);
+    const riverRim = new THREE.Mesh(riverRimGeo, tileMat(m.stone, 3));
+    riverRim.position.y = -.03; riverRim.receiveShadow = true; this.group.add(riverRim);
+    // 水面（随流漂移的法线在 m.waterRiver 上）
+    const riverWaterGeo = new THREE.ShapeGeometry(shapeOf(outline));
+    riverWaterGeo.rotateX(-Math.PI / 2);
+    const riverWater = new THREE.Mesh(riverWaterGeo, m.waterRiver);
+    // 水面不接收阴影：架空走廊/桥体的影子会投出一块硬边深色矩形，读作浮在水上的另一层
+    riverWater.position.y = RIVER_SURF; riverWater.receiveShadow = false; this.group.add(riverWater);
     // 三座白色石拱桥：沁园桥、体艺馆前断口桥与两段之间一座
     const b1 = makeArchBridge(m, 4.2, 12, 2.6, { abut: false });
     b1.position.set(-45, 0, -45);
@@ -403,8 +455,11 @@ export class Campus {
     const QY_AE = -38.6 * Math.PI / 180;    // 颈口东角
     const QY_NX = .45, QY_NZ = -.89;        // 窄颈走向（北偏东）
     const QY_NECK = 4.5;                    // 窄颈长度
-    const QY_ARM = { xE: -56.6, zN: -45.8, zS: -38.2 }; // 水臂东端（贴空中走廊石墙）
+    // 水臂东端即梓荫河西端封口（x=−55.9、z −48.5…−41.5 与河道横断面完全对齐）：
+    // 两侧水面共边，水位相同，看上去是一整片水；东岸不再留石沿
+    const QY_ARM = { xE: -55.9, zN: -48.5, zS: -41.5 };
     const qyOutline = (grow) => {
+      // 生成的闭合多边形点列（索引 46→47 为水臂东切边，即与梓荫河连通的开口）
       const R = QY_R + grow;
       const pts = [];
       // 圆池岸线：自东颈口经南、西、北绕回西颈口（留出颈口缺口）
@@ -426,18 +481,57 @@ export class Campus {
       return pts;
     };
     const toV2 = (pts) => pts.map((p) => new THREE.Vector2(p.x, -p.z)); // shape.y → 世界 −z
-    const waterShape = new THREE.Shape(toV2(qyOutline(0)));
+    this.qinyuPoly = qyOutline(0); // 供 groundY 取池底高度
+    const waterShape = new THREE.Shape(toV2(this.qinyuPoly));
     const waterGeo = new THREE.ShapeGeometry(waterShape);
     waterGeo.rotateX(-Math.PI / 2);
-    const water = new THREE.Mesh(waterGeo, m.water);
-    water.position.y = -.84; water.receiveShadow = true; this.group.add(water);
-    // 0.6m 窄石岸：有厚度的石砌池沿，压住水面边缘并落到盆地底
-    const rimShape = new THREE.Shape(toV2(qyOutline(.5)));
-    rimShape.holes.push(new THREE.Path(toV2(qyOutline(-.12))));
-    const rimGeo = new THREE.ExtrudeGeometry(rimShape, { depth: .26, bevelEnabled: false });
+    // 沁园水面与梓荫河同水位（−1.2）、同材质：接缝处不再有高低差或两套水纹
+    const water = new THREE.Mesh(waterGeo, m.waterRiver);
+    water.position.y = -1.2; water.receiveShadow = false; this.group.add(water);
+    // 沁园水面碰撞：盆底可行走，深水区只封到桥面/亭台（-.58/-.31）以下
+    {
+      const poly = qyOutline(-.08);
+      const inside = (x, z) => {
+        let r = false;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+          const xi = poly[i].x, zi = poly[i].z, xj = poly[j].x, zj = poly[j].z;
+          if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) r = !r;
+        }
+        return r;
+      };
+      for (let x = -71.5; x <= -55.5; x += 1) {
+        for (let z = -47.5; z <= -27; z += 1) {
+          if (!inside(x, z)) continue;
+          this.colliders.push({ x, z, hx: .55, hz: .55, y1: -.72 });
+        }
+      }
+    }
+    // 池底在沁园水面轮廓内下挖至 −1.45（水面 −1.2 之下），否则水面会沉到盆地平面以下而看不见
+    {
+      const bp = this._qinyuBasin.mesh.geometry.attributes.position;
+      const bx = this._qinyuBasin.cx, bz = this._qinyuBasin.cz;
+      const poly = qyOutline(.05);
+      const inside = (x, z) => {
+        let r = false;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+          const xi = poly[i].x, zi = poly[i].z, xj = poly[j].x, zj = poly[j].z;
+          if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) r = !r;
+        }
+        return r;
+      };
+      for (let i = 0; i < bp.count; i++) {
+        const wx = bp.getX(i) + bx, wz = bp.getZ(i) + bz;
+        if (inside(wx, wz)) bp.setY(i, -1.47); // 网格 y + .02 = 世界 −1.45
+      }
+      bp.needsUpdate = true;
+      this._qinyuBasin.mesh.geometry.computeVertexNormals();
+    }
+    // 石砌池沿：加高到自下沉池底砌至盆地平面（−1.45…−0.74）；东端（idx45→46）断开，与水臂开口对齐
+    const rimShape = band(qyOutline(.5), qyOutline(-.12), 46); // 46→47 为水臂东切边
+    const rimGeo = new THREE.ExtrudeGeometry(rimShape, { depth: .71, bevelEnabled: false });
     rimGeo.rotateX(-Math.PI / 2);
     const rim = new THREE.Mesh(rimGeo, m.stone);
-    rim.position.y = -1; rim.receiveShadow = true; this.group.add(rim);
+    rim.position.y = -1.45; rim.receiveShadow = false; this.group.add(rim);
     // 空中走廊：南端接实验楼西墙，北端贯穿电教楼东翼并从楼北面穿出（方塔东移贴廊东侧）
     // 对照视频：两侧青砖矮墙 + 深色压顶 + 砖壁柱 + 梁式顶棚（梁间透光）+ 壁灯
     const cor = new THREE.Group();
@@ -705,7 +799,7 @@ export class Campus {
     );
     this.dachengGate = buildDachengGate(this.ctx);
     this.dachengGate.position.set(-28, 0, 61);
-    // 大成门：台基 0.34m 可站立，南侧台阶可走；通长门槛需跳一下
+    // 大成门：台基 0.34m 可站立，南侧台阶可走（柱下已无通长门槛）
     this.walkSurfaces.push(
       { x0: -40.5, x1: -15.5, z0: 56.5, z1: 65.5, y: .34 },
       { x0: -31.2, x1: -24.8, z0: 65.5, z1: 66.9, yA: .34, yB: 0, axis: 'z' },
@@ -753,13 +847,14 @@ export class Campus {
       corridorGaps: [[-6.8, -1.2], [1.2, 6.8], [-29.6, -27.4], [27.4, 29.6]],
     });
     this._registerInterior(this.academy);
-    // 蛟川东西副楼：同形 16×10、3 层、基座 2.6 与主楼首层外廊同层；北墙开门直连外廊，南门下院内
+    // 蛟川东西副楼：同形 16×10、3 层、基座 2.6 与主楼首层外廊同层；北墙开门直连外廊，南立面不设门与台阶
     this.academyEast = buildModernBlock(this.ctx, {
       x: -89.5, z: 105.5, w: 16, d: 10, floors: 3, key: 'teach4', name: '蛟川东副楼',
       baseH: 2.6, openInterior: true, entrance: false,
     });
     decorateAnnex(this.ctx, this.academyEast, {
       by: 2.6, w: 16, d: 10, floors: 3, bbSide: 1, stairSide: -1, entry: 'front', northDoorX: 0,
+      entryDoor: false, entrySteps: false,
     });
     this._registerInterior(this.academyEast);
     this.academyWing = buildModernBlock(this.ctx, {
@@ -768,6 +863,7 @@ export class Campus {
     });
     decorateAnnex(this.ctx, this.academyWing, {
       by: 2.6, w: 16, d: 10, floors: 3, bbSide: 1, stairSide: -1, entry: 'front', northDoorX: 0,
+      entryDoor: false, entrySteps: false,
     });
     this._registerInterior(this.academyWing);
     // 书院办公室：独立 4 层，南立面贴南侧雾墙（z≈158.8…159.8，随 x 略斜）；入口朝北面向书院前庭
@@ -877,30 +973,17 @@ export class Campus {
       }
     }
     this.goosePen = buildGoosePen(this.ctx);
-    // 空中走廊西侧、梓荫河南岸；在下沉区外，落回常高地面
-    this.goosePen.position.set(-53.5, 0, -46.8);
+    // 移到梓荫河北岸、空中走廊以东的常高草坪（原址在河槽内，鹅棚与平台压住水面）
+    this.goosePen.position.set(-47.5, 0, -51);
     this.group.add(this.goosePen);
-    // 鹅棚北侧灰白平台：接鹅棚北缘，台面与常高地面齐平
-    const penDeck = new THREE.Mesh(new THREE.BoxGeometry(5.6, .26, 1.75), this.mats.slab);
-    penDeck.position.set(-53.1, -.06, -49.325);   // 台面 y=.07，南缘 z=-48.45 贴鹅棚
-    penDeck.castShadow = true; penDeck.receiveShadow = true;
-    this.group.add(penDeck);
-    this.walkSurfaces.push({ x0: -55.9, x1: -50.3, z0: -50.2, z1: -48.45, y: .07 });
-    // 直跑两级踏步（平台西缘向西落至盆底）
-    for (let i = 0; i < 2; i++) {
-      const top = .07 - (i + 1) * .2;
-      const st = new THREE.Mesh(new THREE.BoxGeometry(.4, top + 1.1, 1.3), this.mats.slab);
-      st.position.set(-56.1 - i * .4, (top - 1.1) / 2, -49.1);
-      st.castShadow = true; st.receiveShadow = true; this.group.add(st);
-      this.walkSurfaces.push({ x0: -56.3 - i * .4, x1: -55.9 - i * .4, z0: -49.75, z1: -48.45, y: top });
-    }
     // 自习室东南 / 大成殿西北：石桥水池（对照实景照片：绿水池、石岸、假山石、石灯笼、菱形镂空石栏平板桥）
     this.studyPond = buildStudyPond(this.ctx);
     this.group.add(this.studyPond);
     this.colliders.push(...(this.studyPond.userData.colliders || []));
     this.walkSurfaces.push(...(this.studyPond.userData.walkSurfaces || []));
     this._buildHillLandmarks();
-    this.fudelang = buildFudelang(this.ctx, { x: 82.6, z: -60, plaque: this.mats.plaques.fude });
+    // 北移至岸边以北：台基/屋檐不再压在东段水面上（原 z=-60 时台基南缘 -57.6 比河岸还往南 2~3m）
+    this.fudelang = buildFudelang(this.ctx, { x: 82.6, z: -63.2, plaque: this.mats.plaques.fude });
     // 富的廊：台基可走（y=.345），西端两级石阶自院落上廊；两侧美人靠不可穿越
     this.walkSurfaces.push(
       { x0: 70.9, x1: 94.3, z0: -62.4, z1: -57.6, y: .345 },
@@ -1019,6 +1102,7 @@ export class Campus {
           decorateSouthBlock(this.ctx, b, {
             by: .8, fby: 0, w: sW, d: half, floors: d.floors || 4,
             bbSide: -1, connectX: nbX + connX - sX, sharedW: 8, bare: !!d.bare,
+            southDoor: false, // 南块南立面不设入口门与室外台阶
           });
           this._registerInterior(nb);
           d.cols = [];
@@ -1151,6 +1235,12 @@ export class Campus {
     // 灰方柱为实体（竖段西侧 9 根、横段南侧 5 根）
     for (let i = 0; i <= 8; i++) this.colliders.push({ x: 11.28, z: 6.4 - i * (26.4 / 8), hx: .25, hz: .25 });
     for (let i = 0; i <= 4; i++) this.colliders.push({ x: -0.3 + i * (12.6 / 4), z: 8.12, hx: .25, hz: .25 });
+    // 廊下红木长凳（靠墙）：竖段 benchZ = -9.0 / 4.1，横段 benchX = 1.1
+    this.colliders.push(
+      { x: 14.40, z: -9.0, hx: .23, hz: .93 },
+      { x: 14.40, z: 4.1, hx: .23, hz: .93 },
+      { x: 1.1, z: 5.0, hx: .93, hz: .23 },
+    );
     // 红廊与篮球场之间的铁栅栏（样式同梓荫山 D 线，二维平面）
     buildFenceRun(this.ctx, [[35, -15], [18, -15], [18, 33.5]], true);
     // 排球场西缘＋南缘铁栅栏（同上二维平面样式，贴场地边线转东至跑道）
@@ -1388,18 +1478,36 @@ export class Campus {
     const rot = (x, z) => quarterTurnOnly
       ? q === 0 ? [x, z] : q === 1 ? [z, -x] : q === 2 ? [-x, -z] : [-z, x]
       : [x * Math.cos(b.rotation.y) + z * Math.sin(b.rotation.y), -x * Math.sin(b.rotation.y) + z * Math.cos(b.rotation.y)];
+    const colMap = new Map();
     for (const c of data.colliders || []) {
       const [cx, cz] = rot(c.x, c.z);
       const ex = Math.abs(Math.cos(b.rotation.y)) * c.hx + Math.abs(Math.sin(b.rotation.y)) * c.hz;
       const ez = Math.abs(Math.sin(b.rotation.y)) * c.hx + Math.abs(Math.cos(b.rotation.y)) * c.hz;
-      this.colliders.push({
+      const out = {
         x: cx + px, z: cz + pz,
         hx: quarterTurnOnly ? ((q % 2) ? c.hz : c.hx) : ex,
         hz: quarterTurnOnly ? ((q % 2) ? c.hx : c.hz) : ez,
         y0: c.y0 === undefined ? undefined : c.y0 + py,
         y1: c.y1 === undefined ? undefined : c.y1 + py,
         pad: c.pad,
-      });
+      };
+      if (c.dyn) { out.dyn = true; out.off = false; }
+      colMap.set(c, out);
+      this.colliders.push(out);
+    }
+    // 可撞倒桌椅：单元枢轴随建筑旋转/平移后存入 dynUnits，并回指自己的碰撞体（翻倒后置 off）
+    for (const u of data.units || []) {
+      const [ux, uz] = rot(u.x, u.z);
+      const wu = {
+        x: ux + px, z: uz + pz, y: u.y + py,
+        ry: b.rotation.y,
+        parts: u.parts,
+        col: u.col ? colMap.get(u.col) : null,
+        tipped: false, ang: 0, vel: 0, target: 0, axis: null,
+        instances: [],
+      };
+      if (wu.col) wu.col.unit = wu;
+      this.dynUnits.push(wu);
     }
     for (const w of data.walk || []) {
       const [ax, az] = rot(w.x0, w.z0);
@@ -1420,9 +1528,192 @@ export class Campus {
     }
   }
 
+  /** 把可撞倒桌椅烘成 InstancedMesh（按材质一批），每件预存局部矩阵；翻倒时只重写该单元实例 */
+  _buildDynFurniture() {
+    const units = this.dynUnits;
+    if (!units.length) return;
+    const unitBox = new THREE.BoxGeometry(1, 1, 1);
+    const q0 = new THREE.Quaternion();
+    const one = new THREE.Vector3(1, 1, 1);
+    const UP = new THREE.Vector3(0, 1, 0);
+    // 按材质统计实例数
+    const matMap = new Map();
+    for (const u of units) for (const p of u.parts) {
+      let e = matMap.get(p.mat);
+      if (!e) { e = { count: 0 }; matMap.set(p.mat, e); }
+      e.count++;
+    }
+    for (const [mat, e] of matMap) {
+      const im = new THREE.InstancedMesh(unitBox, mat, e.count);
+      im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      im.castShadow = true; im.receiveShadow = true;
+      im.frustumCulled = false; // 单元会翻倒到原包围球外，关掉剔除避免整批闪失
+      this.group.add(im);
+      this._dynMeshes.push(im);
+      e.mesh = im;
+    }
+    const cursors = new Map();
+    for (const u of units) {
+      u.pivot = new THREE.Vector3(u.x, u.y, u.z);
+      u.base = new THREE.Matrix4().compose(u.pivot, q0.setFromAxisAngle(UP, u.ry), one);
+      for (const p of u.parts) {
+        const e = matMap.get(p.mat);
+        const idx = cursors.get(p.mat) || 0;
+        cursors.set(p.mat, idx + 1);
+        const local = new THREE.Matrix4().compose(
+          new THREE.Vector3(p.x, p.y, p.z), new THREE.Quaternion(), new THREE.Vector3(p.w, p.h, p.d));
+        const m = new THREE.Matrix4().multiplyMatrices(u.base, local);
+        e.mesh.setMatrixAt(idx, m);
+        u.instances.push({ im: e.mesh, idx, local });
+      }
+    }
+    for (const im of this._dynMeshes) im.instanceMatrix.needsUpdate = true;
+  }
+
+  /** 跑动撞击：命中桌椅单元则整组翻倒（不阻挡本帧移动，下一帧碰撞体失效可穿过） */
+  knockAt(x, z, y, dx, dz) {
+    let best = null, bd = Infinity;
+    for (const c of this.colliders) {
+      if (!c.dyn || c.off || !c.unit || c.unit.tipped) continue;
+      if (c.y0 !== undefined && y < c.y0 - .02) continue;
+      if (c.y1 !== undefined && y >= c.y1) continue;
+      if (Math.abs(x - c.x) < c.hx + .2 && Math.abs(z - c.z) < c.hz + .2) {
+        const d = Math.abs(x - c.x) + Math.abs(z - c.z);
+        if (d < bd) { bd = d; best = c; }
+      }
+    }
+    if (!best) return false;
+    this._knockUnit(best.unit, dx, dz);
+    return true;
+  }
+
+  /** 撞倒后扶正：找最近一组已翻倒的桌椅，反向缓动回原位（碰撞体全程保持有效） */
+  restoreNear(x, z, y, r = 2.4) {
+    let best = null, bd = Infinity;
+    for (const u of this._tipped) {
+      if (u.target === 0) continue;
+      const d = Math.hypot(u.x - x, u.z - z);
+      if (d > r) continue;
+      if (u.y !== undefined && Math.abs(u.y - y) > 1.6) continue;
+      if (d < bd) { bd = d; best = u; }
+    }
+    if (!best) return false;
+    best.target = 0;
+    best.tipped = false;
+    best.vel = -1.2;
+    return true;
+  }
+
+  _knockUnit(u, dx, dz) {
+    if (u.tipped) return;
+    const l = Math.hypot(dx, dz) || 1;
+    const ux = dx / l, uz = dz / l;
+    const c = u.col;
+    // 绕整组家具的形心翻倒：翻到 180° 才是真正的「翻过去」（桌椅四脚朝天、高度仍约 0.9m）；
+    // 只翻 90° 会让课桌立在原地像一块竖板，还会和邻桌视觉穿插
+    u.axis = new THREE.Vector3(uz, 0, -ux);
+    u.edge = new THREE.Vector3(u.x, c ? (c.y0 + c.y1) / 2 : u.y + .55, u.z);
+    u.target = Math.PI;
+    u.tipped = true;
+    u.vel = 4;
+    // 注意：碰撞体保持有效。翻倒过程中/翻倒后仍按当前姿态更新 AABB，
+    // 否则一撞就把碰撞关掉，角色会直接从还在倒下的桌子里穿过去
+    this._tipped.push(u);
+  }
+
+  _updateDynFurniture(dt) {
+    if (!this._tipped.length) return;
+    const tmp = new THREE.Matrix4();
+    const tilt = new THREE.Matrix4();
+    const t1 = new THREE.Matrix4();
+    const t2 = new THREE.Matrix4();
+    const corner = new THREE.Vector3();
+    for (const u of this._tipped) {
+      if (u.ang !== u.target || u.vel !== 0) {
+        // 弹簧阻尼：翻过去时轻微过冲，到位后停住（不越过平躺）
+        u.vel += (u.target - u.ang) * 220 * dt;
+        u.vel *= Math.exp(-dt * 11);
+        u.ang += u.vel * dt;
+        u.ang = Math.min(Math.PI, Math.max(0, u.ang));
+        if (Math.abs(u.target - u.ang) < .002 && Math.abs(u.vel) < .01) { u.ang = u.target; u.vel = 0; }
+        const e = u.edge;
+        t1.makeTranslation(e.x, e.y, e.z);
+        t2.makeRotationAxis(u.axis, u.ang);
+        t1.multiply(t2);
+        t2.makeTranslation(-e.x, -e.y, -e.z);
+        tilt.copy(t1).multiply(t2);
+        tmp.multiplyMatrices(tilt, u.base);
+        // 贴地：翻转后最低角落到楼面，避免整组悬空或扎进地板
+        let minY = Infinity;
+        for (const p of u.parts) {
+          for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+            corner.set(p.x + sx * p.w / 2, p.y + sy * p.h / 2, p.z + sz * p.d / 2).applyMatrix4(tmp);
+            if (corner.y < minY) minY = corner.y;
+          }
+        }
+        const drop = u.y - minY;
+        if (drop !== 0) {
+          tmp.elements[13] += drop;
+        }
+        // 翻 180° 后包围盒与原位完全一致，碰撞体不必重算：保持实体即可，
+        // 角色撞过来会停住，不会穿过正在倒下或已翻倒的桌板
+        for (const it of u.instances) {
+          it.im.setMatrixAt(it.idx, tmp.clone().multiply(it.local));
+          it.im.instanceMatrix.needsUpdate = true;
+        }
+      }
+    }
+  }
+
+  /** 距梓荫河水岸（轮廓边线）小于 m（含轮廓内部）；树木/灌木按冠幅据此清出河面 */
+  nearRiver(x, z, m = 0) {
+    if (!this.riverPoly) return false;
+    if (this.inRiver(x, z)) return true;
+    if (m <= 0) return false;
+    const poly = this.riverPoly;
+    let best = Infinity;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const ax = poly[i][0], az = poly[i][1], bx = poly[j][0], bz = poly[j][1];
+      const vx = bx - ax, vz = bz - az;
+      const l2 = vx * vx + vz * vz || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / l2));
+      best = Math.min(best, Math.hypot(x - (ax + vx * t), z - (az + vz * t)));
+    }
+    return best < m;
+  }
+
+  /** 是否在沁园水面轮廓内（圆池 + 窄颈 + 水臂，与池岸/池底共用同一轮廓） */
+  inQinyuWater(x, z) {
+    const poly = this.qinyuPoly;
+    if (!poly || !poly.length) return false;
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i].x, zi = poly[i].z, xj = poly[j].x, zj = poly[j].z;
+      if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+
+  /** 是否在梓荫河水道轮廓内（水面、河床与地面开洞共用同一轮廓） */
+  inRiver(x, z) {
+    const poly = this.riverPoly;
+    if (!poly || !poly.length) return false;
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], zi = poly[i][1], xj = poly[j][0], zj = poly[j][1];
+      if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+
   /** refY：可选脚底参考高度；只采纳不高于 refY+.36 的走面，用于多层楼内景 */
   groundY(x, z, refY) {
     let y = (this.hillHeight ? this.hillHeight(x, z) : 0) - this._qinyuDrop(x, z);
+    // 梓荫河：地面已按河道开洞下沉，脚底改按「落水后的游泳面」取（−1.35，可跳上岸）；
+    // 河上方还有桥面走面时，下面的 walkSurfaces 会取到更高的桥面
+    if (this.riverPoly && this.inRiver(x, z)) y = this.riverSwim;
+    // 沁园池底已下挖到 −1.45：站在水里的脚底取池底，避免浮在水面之上
+    else if (this.qinyuPoly && this.inQinyuWater(x, z)) y = -1.45;
     // 可站立平台/坡道（台基、台阶）：取最高的一块
     for (const s of this.walkSurfaces) {
       if (s.ry !== undefined) {
@@ -1471,14 +1762,16 @@ export class Campus {
     return false;
   }
 
-  /** 小人不可通行的位置：出红线、撞到建筑或任何雾墙。y 为脚底高度，高于栅栏即可跨越 */
-  isBlocked(x, z, y = 0) {
+  /** 小人不可通行的位置：出红线、撞到建筑或任何雾墙。y 为脚底高度，高于栅栏即可跨越。
+   *  r：判定半径（小人身体半径）；与碰撞体自带的 pad 取较大值，避免身体插进墙/桌椅 */
+  isBlocked(x, z, y = 0, r = 0) {
     if (!this.inBounds(x, z)) return true;
     for (const c of this.colliders) {
+      if (c.off) continue; // 已被撞倒的桌椅不再阻挡
       // 内景墙体按楼层高度登记：y0 以上、y1 以下才阻挡
       if (c.y0 !== undefined && y < c.y0 - .02) continue;
       if (c.y1 !== undefined && y >= c.y1) continue;
-      const pad = c.pad === undefined ? 0 : c.pad;
+      const pad = Math.max(c.pad === undefined ? 0 : c.pad, r);
       if (Math.abs(x - c.x) < c.hx + pad && Math.abs(z - c.z) < c.hz + pad) return true;
     }
     for (const [a, b] of this.fogSegments) {
@@ -1505,6 +1798,7 @@ export class Campus {
   onlyFencesBlocked(x, z) {
     if (!this.inBounds(x, z)) return false;
     for (const c of this.colliders) {
+      if (c.off) continue;
       const pad = c.pad === undefined ? 0 : c.pad;
       if (Math.abs(x - c.x) < c.hx + pad && Math.abs(z - c.z) < c.hz + pad) return false;
     }
@@ -1761,7 +2055,7 @@ export class Campus {
       { id: 'academy', priority: 1, name: '蛟川书院', en: 'Jiaochuan Academy', pos: [-118, 18, 107], target: [-118, 9, 107], camera: [-50, 34, 175], desc: '校园西南侧的独立院落。清乾隆年间创办，为本地近代教育之源；主楼五层，东西副楼与办公室沿南廊布置。' },
       { id: 'zhufeng', name: '朱枫烈士纪念楼', en: 'Zhu Feng Memorial', pos: [22, 10, 122], target: [22, 5, 122], camera: [56, 18, 150], desc: '田径场西南角的小楼，与行政楼相邻，纪念革命烈士朱枫。' },
       { id: 'admin', name: '行政楼', en: 'Administration', pos: [17, 8, 139], target: [17, 4, 139], camera: [40, 12, 160], desc: '校门东侧的行政办公小楼。' },
-      { id: 'fude', name: '富的廊', en: 'Fude Corridor', pos: [87, 5, -60], target: [87, 2, -60], camera: [118, 14, -30], desc: '紧贴梓荫河东北岸的单面空廊，暗红柱配石柱础，两侧通长格栅美人靠，是进入梓荫山体的起点。' },
+      { id: 'fude', name: '富的廊', en: 'Fude Corridor', pos: [87, 5, -63], target: [87, 2, -63], camera: [118, 14, -30], desc: '紧贴梓荫河东北岸的单面空廊，暗红柱配石柱础，两侧通长格栅美人靠，是进入梓荫山体的起点。' },
       { id: 'lin', priority: 1, name: '林则徐纪念堂', en: 'Lin Zexu Hall', pos: [100, 10, -56], target: [100, 4, -56], camera: [86, 11, -70], desc: '沿红木楼梯爬升即至林则徐纪念堂。两层木构，正门朝西临梓荫河，二层挑出白色镂空栏杆外廊。' },
       { id: 'ziyinge', priority: 1, name: '梓荫阁', en: 'Ziyin Pavilion', pos: [111, 16, -43], target: [111, 10, -43], camera: [146, 26, -20], desc: '山顶高台后部的两层楼阁，白粉墙、深灰瓦重檐，二层连续木窗，一层红褐格栅门，正门朝南面向操场。' },
       { id: 'wugong', priority: 2, name: '吴公纪功碑亭', en: 'Wu Gong Stele Pavilion', pos: [70, 7, -46.5], target: [70, 3.5, -46.5], camera: [92, 12, -30], desc: '西坡低处临石板路的四柱方亭，单檐四角攒尖、灰绿瓦翘角，四柱悬竖联，亭内立吴公纪功碑。' },
@@ -1787,6 +2081,7 @@ export class Campus {
 
   update(dt, t, { night = 0, season = 'summer' } = {}) {
     this._time = t;
+    this._updateDynFurniture(dt);
     // 雾墙随昼夜变暗，夜间不至于泛白
     if (this.fogWallMat) {
       this.fogWallMat.color.copy(FOG_DAY).lerp(FOG_NIGHT, night * .92);
@@ -1836,10 +2131,28 @@ export class Campus {
     };
     if (this.ctx.flagGeo) flutter(this.ctx.flagGeo, 0);
     if (this.ctx.fieldFlagGeo) flutter(this.ctx.fieldFlagGeo, .9);
-    // water ripple
+    // water ripple：既有池面沿用全局法线；梓荫河顺流漂移、沁园静水极缓
     if (this.mats.waterNormal) {
       this.mats.waterNormal.offset.x = (t * .012) % 1;
       this.mats.waterNormal.offset.y = (t * .008) % 1;
+    }
+    if (this.mats.riverNormal) {
+      const r = this.mats.riverNormal;
+      r.offset.y = (r.offset.y + dt * .10) % 1;  // 顺流（uv v 沿各段局部长度方向）
+      r.offset.x = (t * .006) % 1;               // 轻微横向扰动
+    }
+    if (this.mats.stillNormal) {
+      const s = this.mats.stillNormal;
+      s.offset.x = (t * .006) % 1;
+      s.offset.y = (t * .004) % 1;
+    }
+    // 夜间水面降低粗糙度让高光更集中；过低会在法线贴图上炸出满屏白点，故只收 0.04
+    if (this.mats.waterRiver) {
+      this.mats.waterRiver.roughness = .25 - night * .04;
+      this.mats.waterRiver.metalness = .07 + night * .03;
+    }
+    if (this.mats.waterStill) {
+      this.mats.waterStill.roughness = .32 - night * .06;
     }
   }
 }
